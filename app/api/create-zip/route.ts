@@ -2,11 +2,15 @@ import { NextResponse } from 'next/server';
 
 declare global {
   var activeSandbox: any;
+  var activeSandboxProvider: any;
 }
 
 export async function POST() {
   try {
-    if (!global.activeSandbox) {
+    // Check for both v1 and v2 sandbox references
+    const sandbox = global.activeSandbox || global.activeSandboxProvider;
+    
+    if (!sandbox) {
       return NextResponse.json({ 
         success: false, 
         error: 'No active sandbox' 
@@ -16,7 +20,7 @@ export async function POST() {
     console.log('[create-zip] Creating project zip...');
     
     // Create zip file in sandbox using standard commands
-    const zipResult = await global.activeSandbox.runCommand({
+    const zipResult = await sandbox.runCommand({
       cmd: 'bash',
       args: ['-c', `zip -r /tmp/project.zip . -x "node_modules/*" ".git/*" ".next/*" "dist/*" "build/*" "*.log"`]
     });
@@ -26,7 +30,7 @@ export async function POST() {
       throw new Error(`Failed to create zip: ${error}`);
     }
     
-    const sizeResult = await global.activeSandbox.runCommand({
+    const sizeResult = await sandbox.runCommand({
       cmd: 'bash',
       args: ['-c', `ls -la /tmp/project.zip | awk '{print $5}'`]
     });
@@ -35,7 +39,7 @@ export async function POST() {
     console.log(`[create-zip] Created project.zip (${fileSize.trim()} bytes)`);
     
     // Read the zip file and convert to base64
-    const readResult = await global.activeSandbox.runCommand({
+    const readResult = await sandbox.runCommand({
       cmd: 'base64',
       args: ['/tmp/project.zip']
     });

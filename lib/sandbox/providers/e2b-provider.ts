@@ -70,21 +70,51 @@ export class E2BProvider extends SandboxProvider {
     }
   }
 
-  async runCommand(command: string): Promise<CommandResult> {
+  async runCommand(command: string | { cmd: string; args: string[] }): Promise<CommandResult> {
     if (!this.sandbox) {
       throw new Error('No active sandbox');
     }
 
+    // Handle both string and object formats
+    let useShell = false;
+    let cmdToRun: string | string[];
+    
+    if (typeof command === 'string') {
+      cmdToRun = command;
+      useShell = true;
+    } else if (command && typeof command === 'object' && 'cmd' in command && 'args' in command) {
+      // Check if this is a shell command (bash -c)
+      if (command.cmd === 'bash' && command.args[0] === '-c') {
+        // Execute the shell command directly
+        cmdToRun = command.args[1];
+        useShell = true;
+      } else if (command.cmd === 'base64') {
+        // Handle base64 command
+        cmdToRun = ['base64', ...command.args];
+        useShell = false;
+      } else {
+        cmdToRun = [command.cmd, ...command.args];
+        useShell = false;
+      }
+    } else {
+      throw new Error('Invalid command format');
+    }
     
     const result = await this.sandbox.runCode(`
       import subprocess
       import os
 
       os.chdir('/home/user/app')
-      result = subprocess.run(${JSON.stringify(command.split(' '))}, 
+      ${useShell ? 
+        `result = subprocess.run(${JSON.stringify(cmdToRun)}, 
                             capture_output=True, 
                             text=True, 
-                            shell=False)
+                            shell=True)` :
+        `result = subprocess.run(${JSON.stringify(cmdToRun)}, 
+                            capture_output=True, 
+                            text=True, 
+                            shell=False)`
+      }
 
       print("STDOUT:")
       print(result.stdout)
