@@ -131,9 +131,9 @@ export class E2BProvider extends SandboxProvider {
     let cleanStdout = output;
     if (output.includes('STDOUT:')) {
       const lines = output.split('\n');
-      const stdoutStartIndex = lines.findIndex(line => line.trim() === 'STDOUT:');
-      const stderrStartIndex = lines.findIndex(line => line.trim().startsWith('STDERR:'));
-      const returnCodeIndex = lines.findIndex(line => line.trim().startsWith('Return code:'));
+      const stdoutStartIndex = lines.findIndex((line: string) => line.trim() === 'STDOUT:');
+      const stderrStartIndex = lines.findIndex((line: string) => line.trim().startsWith('STDERR:'));
+      const returnCodeIndex = lines.findIndex((line: string) => line.trim().startsWith('Return code:'));
       
       if (stdoutStartIndex !== -1) {
         const endIndex = stderrStartIndex !== -1 ? stderrStartIndex : 
