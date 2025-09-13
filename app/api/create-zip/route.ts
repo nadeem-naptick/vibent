@@ -26,7 +26,9 @@ export async function POST() {
     });
     
     if (zipResult.exitCode !== 0) {
-      const error = await zipResult.stderr();
+      const error = typeof zipResult.stderr === 'function'
+        ? await zipResult.stderr()
+        : zipResult.stderr;
       throw new Error(`Failed to create zip: ${error}`);
     }
     
@@ -35,8 +37,11 @@ export async function POST() {
       args: ['-c', `ls -la /tmp/project.zip | awk '{print $5}'`]
     });
     
-    const fileSize = await sizeResult.stdout();
-    console.log(`[create-zip] Created project.zip (${fileSize.trim()} bytes)`);
+    // Handle both function and property formats
+    const fileSize = typeof sizeResult.stdout === 'function' 
+      ? await sizeResult.stdout() 
+      : sizeResult.stdout;
+    console.log(`[create-zip] Created project.zip (${fileSize.trim ? fileSize.trim() : fileSize} bytes)`);
     
     // Read the zip file and convert to base64
     const readResult = await sandbox.runCommand({
@@ -45,11 +50,16 @@ export async function POST() {
     });
     
     if (readResult.exitCode !== 0) {
-      const error = await readResult.stderr();
+      const error = typeof readResult.stderr === 'function' 
+        ? await readResult.stderr() 
+        : readResult.stderr;
       throw new Error(`Failed to read zip file: ${error}`);
     }
     
-    const base64Content = (await readResult.stdout()).trim();
+    // Handle both function and property formats
+    const base64Content = typeof readResult.stdout === 'function'
+      ? (await readResult.stdout()).trim()
+      : readResult.stdout.trim();
     
     // Create a data URL for download
     const dataUrl = `data:application/zip;base64,${base64Content}`;

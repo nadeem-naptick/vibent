@@ -5,11 +5,15 @@ import { FileManifest, FileInfo, RouteInfo } from '@/types/file-manifest';
 
 declare global {
   var activeSandbox: any;
+  var activeSandboxProvider: any;
 }
 
 export async function GET() {
   try {
-    if (!global.activeSandbox) {
+    // Check for both v1 and v2 sandbox references
+    const sandbox = global.activeSandbox || global.activeSandboxProvider;
+    
+    if (!sandbox) {
       return NextResponse.json({
         success: false,
         error: 'No active sandbox'
@@ -19,7 +23,7 @@ export async function GET() {
     console.log('[get-sandbox-files] Fetching and analyzing file structure...');
     
     // Get list of all relevant files
-    const findResult = await global.activeSandbox.runCommand({
+    const findResult = await sandbox.runCommand({
       cmd: 'find',
       args: [
         '.',
@@ -63,7 +67,7 @@ export async function GET() {
           
           // Only read files smaller than 10KB
           if (fileSize < 10000) {
-            const catResult = await global.activeSandbox.runCommand({
+            const catResult = await sandbox.runCommand({
               cmd: 'cat',
               args: [filePath]
             });
