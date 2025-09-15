@@ -49,6 +49,8 @@ function AISandboxPage() {
   const [sandboxData, setSandboxData] = useState<SandboxData | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ text: 'Not connected', active: false });
+  const [sandboxReady, setSandboxReady] = useState(false);
+  const [iframeLoadAttempts, setIframeLoadAttempts] = useState(0);
   const [responseArea, setResponseArea] = useState<string[]>([]);
   const [structureContent, setStructureContent] = useState('No sandbox created yet');
   const [promptInput, setPromptInput] = useState('');
@@ -576,6 +578,17 @@ function AISandboxPage() {
         // No need to restart it immediately after creation
         // Only restart if there's an actual issue later
         console.log('[createSandbox] Sandbox ready with Vite server running');
+        
+        // Reset iframe state for new sandbox
+        setSandboxReady(false);
+        setIframeLoadAttempts(0);
+        
+        // Set a fallback timeout to mark sandbox as ready even if iframe onLoad doesn't fire
+        // This handles cases where iframe loads but onLoad event doesn't trigger
+        setTimeout(() => {
+          console.log('[iframe] Fallback timeout - assuming sandbox is ready');
+          setSandboxReady(true);
+        }, 15000); // 15 second fallback
         
         // Only add welcome message if not coming from home screen
         if (!fromHomeScreen) {
@@ -1594,6 +1607,22 @@ Tip: I automatically detect and install npm packages from your code imports (lik
               title="Open Lovable Sandbox"
               allow="clipboard-write"
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+              onLoad={() => {
+                console.log('[iframe] Loaded successfully');
+                setSandboxReady(true);
+              }}
+              onError={(e) => {
+                console.log('[iframe] Load error detected:', e);
+                if (iframeLoadAttempts < 3) {
+                  setTimeout(() => {
+                    console.log(`[iframe] Retrying load (attempt ${iframeLoadAttempts + 1})`);
+                    setIframeLoadAttempts(prev => prev + 1);
+                    if (iframeRef.current && sandboxData.url) {
+                      iframeRef.current.src = `${sandboxData.url}?retry=${Date.now()}`;
+                    }
+                  }, 2000);
+                }
+              }}
             />
             
             {/* Package installation overlay - shows when installing packages or applying code */}
@@ -1657,6 +1686,33 @@ Tip: I automatically detect and install npm packages from your code imports (lik
               </div>
             )}
             
+            {/* Sandbox startup overlay - shows when sandbox is starting up */}
+            {!sandboxReady && (
+              <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex items-center justify-center z-10">
+                <div className="text-center max-w-md">
+                  <div className="mb-6">
+                    <div className="w-16 h-16 mx-auto">
+                      <svg className="w-full h-full animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    </div>
+                  </div>
+                  
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">Starting Sandbox</h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Initializing your development environment...
+                  </p>
+                  
+                  {iframeLoadAttempts > 0 && (
+                    <div className="text-xs text-gray-500">
+                      Attempting to connect... ({iframeLoadAttempts}/3)
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
             {/* Show a subtle indicator when code is being edited/generated */}
             {generationProgress.isGenerating && generationProgress.isEdit && !codeApplicationState.stage && (
               <div className="absolute top-4 right-4 inline-flex items-center gap-2 px-3 py-1.5 bg-black/80 backdrop-blur-sm rounded-lg">
@@ -1670,6 +1726,8 @@ Tip: I automatically detect and install npm packages from your code imports (lik
               onClick={() => {
                 if (iframeRef.current && sandboxData?.url) {
                   console.log('[Manual Refresh] Forcing iframe reload...');
+                  setSandboxReady(false); // Show loading overlay during manual refresh
+                  setIframeLoadAttempts(0); // Reset retry attempts
                   const newSrc = `${sandboxData.url}?t=${Date.now()}&manual=true`;
                   iframeRef.current.src = newSrc;
                 }
