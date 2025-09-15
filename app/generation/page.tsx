@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { appConfig } from '@/config/app.config';
 import HeroInput from '@/components/HeroInput';
 import SidebarInput from '@/components/app/generation/SidebarInput';
+import { GenerationRecoveryDialog } from '@/components/GenerationRecoveryDialog';
 import HeaderBrandKit from '@/components/shared/header/BrandKit/BrandKit';
 import { HeaderProvider } from '@/components/shared/header/HeaderContext';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -48,6 +49,8 @@ function AISandboxPage() {
   const [sandboxData, setSandboxData] = useState<SandboxData | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ text: 'Not connected', active: false });
+  const [sandboxReady, setSandboxReady] = useState(false);
+  const [iframeLoadAttempts, setIframeLoadAttempts] = useState(0);
   const [responseArea, setResponseArea] = useState<string[]>([]);
   const [structureContent, setStructureContent] = useState('No sandbox created yet');
   const [promptInput, setPromptInput] = useState('');
@@ -142,6 +145,15 @@ function AISandboxPage() {
 
   // Store flag to trigger generation after component mounts
   const [shouldAutoGenerate, setShouldAutoGenerate] = useState(false);
+
+  // Generation interruption recovery state
+  const [interruptionData, setInterruptionData] = useState<{
+    hasInterruption: boolean;
+    partialCode: string;
+    error: any;
+    originalPrompt: string;
+    parsedFiles: Array<{ path: string; content: string; type: string }>;
+  } | null>(null);
 
   // Clear old conversation data on component mount and create/restore sandbox
   useEffect(() => {
@@ -566,6 +578,17 @@ function AISandboxPage() {
         // No need to restart it immediately after creation
         // Only restart if there's an actual issue later
         console.log('[createSandbox] Sandbox ready with Vite server running');
+        
+        // Reset iframe state for new sandbox
+        setSandboxReady(false);
+        setIframeLoadAttempts(0);
+        
+        // Set a fallback timeout to mark sandbox as ready even if iframe onLoad doesn't fire
+        // This handles cases where iframe loads but onLoad event doesn't trigger
+        setTimeout(() => {
+          console.log('[iframe] Fallback timeout - assuming sandbox is ready');
+          setSandboxReady(true);
+        }, 15000); // 15 second fallback
         
         // Only add welcome message if not coming from home screen
         if (!fromHomeScreen) {
@@ -1584,6 +1607,22 @@ Tip: I automatically detect and install npm packages from your code imports (lik
               title="Open Lovable Sandbox"
               allow="clipboard-write"
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+              onLoad={() => {
+                console.log('[iframe] Loaded successfully');
+                setSandboxReady(true);
+              }}
+              onError={(e) => {
+                console.log('[iframe] Load error detected:', e);
+                if (iframeLoadAttempts < 3) {
+                  setTimeout(() => {
+                    console.log(`[iframe] Retrying load (attempt ${iframeLoadAttempts + 1})`);
+                    setIframeLoadAttempts(prev => prev + 1);
+                    if (iframeRef.current && sandboxData.url) {
+                      iframeRef.current.src = `${sandboxData.url}?retry=${Date.now()}`;
+                    }
+                  }, 2000);
+                }
+              }}
             />
             
             {/* Package installation overlay - shows when installing packages or applying code */}
@@ -1647,6 +1686,33 @@ Tip: I automatically detect and install npm packages from your code imports (lik
               </div>
             )}
             
+            {/* Sandbox startup overlay - shows when sandbox is starting up */}
+            {!sandboxReady && (
+              <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex items-center justify-center z-10">
+                <div className="text-center max-w-md">
+                  <div className="mb-6">
+                    <div className="w-16 h-16 mx-auto">
+                      <svg className="w-full h-full animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    </div>
+                  </div>
+                  
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">Starting Sandbox</h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Initializing your development environment...
+                  </p>
+                  
+                  {iframeLoadAttempts > 0 && (
+                    <div className="text-xs text-gray-500">
+                      Attempting to connect... ({iframeLoadAttempts}/3)
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
             {/* Show a subtle indicator when code is being edited/generated */}
             {generationProgress.isGenerating && generationProgress.isEdit && !codeApplicationState.stage && (
               <div className="absolute top-4 right-4 inline-flex items-center gap-2 px-3 py-1.5 bg-black/80 backdrop-blur-sm rounded-lg">
@@ -1660,6 +1726,8 @@ Tip: I automatically detect and install npm packages from your code imports (lik
               onClick={() => {
                 if (iframeRef.current && sandboxData?.url) {
                   console.log('[Manual Refresh] Forcing iframe reload...');
+                  setSandboxReady(false); // Show loading overlay during manual refresh
+                  setIframeLoadAttempts(0); // Reset retry attempts
                   const newSrc = `${sandboxData.url}?t=${Date.now()}&manual=true`;
                   iframeRef.current.src = newSrc;
                 }
@@ -1697,6 +1765,145 @@ Tip: I automatically detect and install npm packages from your code imports (lik
       );
     }
     return null;
+  };
+
+  // Handle generation interruption and offer recovery options
+  const handleGenerationInterruption = (error: any, partialCode: string, rawData: string) => {
+    console.log('[interruption] Detected generation interruption:', error);
+    
+    // Get files from generation progress (what's actually displayed in the sidebar)
+    const generatedFiles = generationProgress.files || [];
+    
+    // Also parse any additional partial files from the raw stream
+    const streamParsedFiles: Array<{ path: string; content: string; type: string }> = [];
+    const fileRegex = /<file path="([^"]+)">([^]*?)(?:<\/file>|$)/g;
+    let match;
+    
+    while ((match = fileRegex.exec(partialCode)) !== null) {
+      const filePath = match[1];
+      const content = match[2].trim();
+      const fileExt = filePath.split('.').pop() || '';
+      const fileType = fileExt === 'jsx' || fileExt === 'js' ? 'javascript' :
+                      fileExt === 'css' ? 'css' :
+                      fileExt === 'json' ? 'json' :
+                      fileExt === 'html' ? 'html' : 'text';
+      
+      streamParsedFiles.push({ path: filePath, content, type: fileType });
+    }
+    
+    // Combine both sources, prioritizing the generated files from progress
+    const allFiles = [...generatedFiles];
+    
+    // Add any stream-parsed files that aren't already in the generated files
+    streamParsedFiles.forEach(streamFile => {
+      const exists = allFiles.some(f => f.path === streamFile.path);
+      if (!exists) {
+        allFiles.push(streamFile);
+      }
+    });
+    
+    // Store interruption data for recovery
+    setInterruptionData({
+      hasInterruption: true,
+      partialCode,
+      error,
+      originalPrompt: aiChatInput,
+      parsedFiles: allFiles,
+      targetUrl: targetUrl || urlInput, // Include the URL being cloned
+      context: conversationContext // Include conversation context
+    });
+    
+    // Update generation progress to show interruption
+    setGenerationProgress(prev => ({
+      ...prev,
+      isGenerating: false,
+      isStreaming: false,
+      status: `Generation interrupted (${allFiles.length} files partially generated)`
+    }));
+    
+    console.log(`[interruption] Preserved ${allFiles.length} partial files for recovery`);
+  };
+
+  // Recovery action handlers
+  const handleResumeGeneration = async () => {
+    if (!interruptionData) return;
+    
+    // Apply partial files first
+    if (interruptionData.parsedFiles.length > 0) {
+      console.log('[recovery] Applying partial files before resume...');
+      setGenerationProgress(prev => ({
+        ...prev,
+        files: interruptionData.parsedFiles,
+        status: 'Applying partial files...'
+      }));
+      
+      // Apply the partial files to sandbox
+      await applyGeneratedCode(interruptionData.partialCode, false);
+    }
+    
+    // Generate targeted prompt for completion
+    const completionPrompt = `Continue generating the React application. You were creating: ${interruptionData.originalPrompt}
+
+Already completed files: ${interruptionData.parsedFiles.map(f => f.path).join(', ')}
+
+Please complete any remaining components or files that are needed for a fully functional application. Focus on what's missing or incomplete.`;
+    
+    // Clear interruption state and resume
+    setInterruptionData(null);
+    setAiChatInput(completionPrompt);
+    
+    // Trigger generation with completion prompt
+    setTimeout(() => {
+      sendChatMessage();
+    }, 100);
+  };
+
+  const handleUsePartialCode = async () => {
+    if (!interruptionData) return;
+    
+    console.log('[recovery] Using partial code as-is...');
+    
+    // Apply the partial files
+    if (interruptionData.parsedFiles.length > 0) {
+      setGenerationProgress(prev => ({
+        ...prev,
+        files: interruptionData.parsedFiles,
+        status: 'Applied partial files'
+      }));
+      
+      await applyGeneratedCode(interruptionData.partialCode, false);
+      addChatMessage(`Applied ${interruptionData.parsedFiles.length} partial files. You can continue building from here.`, 'system');
+    }
+    
+    // Clear interruption state
+    setInterruptionData(null);
+  };
+
+  const handleRestartGeneration = () => {
+    console.log('[recovery] Restarting generation from scratch...');
+    
+    // Reset everything and restart
+    setInterruptionData(null);
+    setGenerationProgress({
+      isGenerating: false,
+      isStreaming: false,
+      status: '',
+      streamedCode: '',
+      isThinking: false,
+      thinkingText: '',
+      thinkingDuration: undefined,
+      currentFile: undefined,
+      files: [],
+      lastProcessedPosition: 0,
+      isEdit: false
+    });
+    
+    // Focus back on input
+    setAiChatInput(interruptionData?.originalPrompt || '');
+  };
+
+  const handleCancelRecovery = () => {
+    setInterruptionData(null);
   };
 
   const sendChatMessage = async () => {
@@ -2023,6 +2230,8 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                 }
               } catch (e) {
                 console.error('Failed to parse SSE data:', e);
+                // Check if this is a generation interruption
+                handleGenerationInterruption(e, generatedCode, buffer + line);
               }
             }
           }
@@ -2978,6 +3187,10 @@ Focus on the key sections and content, making it clean and modern.`;
                 }
               } catch (e) {
                 console.error('Failed to parse SSE data:', e);
+                // Check if this is a generation interruption - get current streaming data
+                const currentStreamedCode = generationProgress.streamedCode || '';
+                const fullPartialCode = generatedCode || currentStreamedCode;
+                handleGenerationInterruption(e, fullPartialCode, line);
               }
             }
           }
@@ -3022,6 +3235,17 @@ Focus on the key sections and content, making it clean and modern.`;
             }]
           }));
         } else {
+          // Check if we have partial streaming data that could indicate an interruption
+          const currentStreamedCode = generationProgress.streamedCode || '';
+          if (currentStreamedCode.trim().length > 0) {
+            console.log('[clone] No complete generatedCode but found streaming data, triggering recovery...');
+            handleGenerationInterruption(
+              new Error('Generation completed without final code'), 
+              currentStreamedCode, 
+              'Incomplete generation detected'
+            );
+            return; // Don't throw error, let recovery dialog handle it
+          }
           throw new Error('Failed to generate recreation');
         }
         
@@ -3526,6 +3750,19 @@ Focus on the key sections and content, making it clean and modern.`;
 
 
     </div>
+    
+    {/* Generation Recovery Dialog */}
+    <GenerationRecoveryDialog
+      isOpen={interruptionData?.hasInterruption || false}
+      partialFiles={interruptionData?.parsedFiles || []}
+      targetUrl={interruptionData?.targetUrl}
+      context={interruptionData?.context}
+      onResume={handleResumeGeneration}
+      onRestart={handleRestartGeneration}
+      onUsePartial={handleUsePartialCode}
+      onCancel={handleCancelRecovery}
+    />
+    
     </HeaderProvider>
   );
 }
