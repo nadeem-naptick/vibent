@@ -1798,7 +1798,10 @@ Tip: I automatically detect and install npm packages from your code imports (lik
     streamParsedFiles.forEach(streamFile => {
       const exists = allFiles.some(f => f.path === streamFile.path);
       if (!exists) {
-        allFiles.push(streamFile);
+        allFiles.push({
+          ...streamFile,
+          completed: true // Mark stream-parsed files as completed
+        });
       }
     });
     
@@ -1808,9 +1811,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
       partialCode,
       error,
       originalPrompt: aiChatInput,
-      parsedFiles: allFiles,
-      targetUrl: targetUrl || urlInput, // Include the URL being cloned
-      context: conversationContext // Include conversation context
+      parsedFiles: allFiles
     });
     
     // Update generation progress to show interruption
@@ -1833,7 +1834,10 @@ Tip: I automatically detect and install npm packages from your code imports (lik
       console.log('[recovery] Applying partial files before resume...');
       setGenerationProgress(prev => ({
         ...prev,
-        files: interruptionData.parsedFiles,
+        files: interruptionData.parsedFiles.map(f => ({
+          ...f,
+          completed: true
+        })),
         status: 'Applying partial files...'
       }));
       
@@ -1867,7 +1871,10 @@ Please complete any remaining components or files that are needed for a fully fu
     if (interruptionData.parsedFiles.length > 0) {
       setGenerationProgress(prev => ({
         ...prev,
-        files: interruptionData.parsedFiles,
+        files: interruptionData.parsedFiles.map(f => ({
+          ...f,
+          completed: true
+        })),
         status: 'Applied partial files'
       }));
       
@@ -1886,9 +1893,11 @@ Please complete any remaining components or files that are needed for a fully fu
     setInterruptionData(null);
     setGenerationProgress({
       isGenerating: false,
-      isStreaming: false,
       status: '',
+      components: [],
+      currentComponent: 0,
       streamedCode: '',
+      isStreaming: false,
       isThinking: false,
       thinkingText: '',
       thinkingDuration: undefined,
@@ -3755,8 +3764,6 @@ Focus on the key sections and content, making it clean and modern.`;
     <GenerationRecoveryDialog
       isOpen={interruptionData?.hasInterruption || false}
       partialFiles={interruptionData?.parsedFiles || []}
-      targetUrl={interruptionData?.targetUrl}
-      context={interruptionData?.context}
       onResume={handleResumeGeneration}
       onRestart={handleRestartGeneration}
       onUsePartial={handleUsePartialCode}
