@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { appConfig } from '@/config/app.config';
 import HeroInput from '@/components/HeroInput';
 import SidebarInput from '@/components/app/generation/SidebarInput';
+import { GenerationRecoveryDialog } from '@/components/GenerationRecoveryDialog';
 import HeaderBrandKit from '@/components/shared/header/BrandKit/BrandKit';
 import { HeaderProvider } from '@/components/shared/header/HeaderContext';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -142,6 +143,15 @@ function AISandboxPage() {
 
   // Store flag to trigger generation after component mounts
   const [shouldAutoGenerate, setShouldAutoGenerate] = useState(false);
+
+  // Generation interruption recovery state
+  const [interruptionData, setInterruptionData] = useState<{
+    hasInterruption: boolean;
+    partialCode: string;
+    error: any;
+    originalPrompt: string;
+    parsedFiles: Array<{ path: string; content: string; type: string }>;
+  } | null>(null);
 
   // Clear old conversation data on component mount and create/restore sandbox
   useEffect(() => {
@@ -1699,6 +1709,129 @@ Tip: I automatically detect and install npm packages from your code imports (lik
     return null;
   };
 
+  // Handle generation interruption and offer recovery options
+  const handleGenerationInterruption = (error: any, partialCode: string, rawData: string) => {
+    console.log('[interruption] Detected generation interruption:', error);
+    
+    // Parse any partial files that were generated
+    const partialFiles: Array<{ path: string; content: string; type: string }> = [];
+    const fileRegex = /<file path="([^"]+)">([^]*?)(?:<\/file>|$)/g;
+    let match;
+    
+    while ((match = fileRegex.exec(partialCode)) !== null) {
+      const filePath = match[1];
+      const content = match[2].trim();
+      const fileExt = filePath.split('.').pop() || '';
+      const fileType = fileExt === 'jsx' || fileExt === 'js' ? 'javascript' :
+                      fileExt === 'css' ? 'css' :
+                      fileExt === 'json' ? 'json' :
+                      fileExt === 'html' ? 'html' : 'text';
+      
+      partialFiles.push({ path: filePath, content, type: fileType });
+    }
+    
+    // Store interruption data for recovery
+    setInterruptionData({
+      hasInterruption: true,
+      partialCode,
+      error,
+      originalPrompt: aiChatInput,
+      parsedFiles: partialFiles
+    });
+    
+    // Update generation progress to show interruption
+    setGenerationProgress(prev => ({
+      ...prev,
+      isGenerating: false,
+      isStreaming: false,
+      status: `Generation interrupted (${partialFiles.length} files partially generated)`
+    }));
+    
+    console.log(`[interruption] Preserved ${partialFiles.length} partial files for recovery`);
+  };
+
+  // Recovery action handlers
+  const handleResumeGeneration = async () => {
+    if (!interruptionData) return;
+    
+    // Apply partial files first
+    if (interruptionData.parsedFiles.length > 0) {
+      console.log('[recovery] Applying partial files before resume...');
+      setGenerationProgress(prev => ({
+        ...prev,
+        files: interruptionData.parsedFiles,
+        status: 'Applying partial files...'
+      }));
+      
+      // Apply the partial files to sandbox
+      await applyGeneratedCode(interruptionData.partialCode, false);
+    }
+    
+    // Generate targeted prompt for completion
+    const completionPrompt = `Continue generating the React application. You were creating: ${interruptionData.originalPrompt}
+
+Already completed files: ${interruptionData.parsedFiles.map(f => f.path).join(', ')}
+
+Please complete any remaining components or files that are needed for a fully functional application. Focus on what's missing or incomplete.`;
+    
+    // Clear interruption state and resume
+    setInterruptionData(null);
+    setAiChatInput(completionPrompt);
+    
+    // Trigger generation with completion prompt
+    setTimeout(() => {
+      sendChatMessage();
+    }, 100);
+  };
+
+  const handleUsePartialCode = async () => {
+    if (!interruptionData) return;
+    
+    console.log('[recovery] Using partial code as-is...');
+    
+    // Apply the partial files
+    if (interruptionData.parsedFiles.length > 0) {
+      setGenerationProgress(prev => ({
+        ...prev,
+        files: interruptionData.parsedFiles,
+        status: 'Applied partial files'
+      }));
+      
+      await applyGeneratedCode(interruptionData.partialCode, false);
+      addChatMessage(`Applied ${interruptionData.parsedFiles.length} partial files. You can continue building from here.`, 'system');
+    }
+    
+    // Clear interruption state
+    setInterruptionData(null);
+  };
+
+  const handleRestartGeneration = () => {
+    console.log('[recovery] Restarting generation from scratch...');
+    
+    // Reset everything and restart
+    setInterruptionData(null);
+    setGenerationProgress({
+      isGenerating: false,
+      isStreaming: false,
+      status: '',
+      streamedCode: '',
+      isThinking: false,
+      thinkingText: '',
+      thinkingDuration: undefined,
+      currentFile: undefined,
+      files: [],
+      lastProcessedPosition: 0,
+      isEdit: false
+    });
+    
+    // Focus back on input
+    setAiChatInput(interruptionData?.originalPrompt || '');
+  };
+
+  const handleCancelRecovery = () => {
+    setInterruptionData(null);
+  };
+
   const sendChatMessage = async () => {
     const message = aiChatInput.trim();
     if (!message) return;
@@ -2023,6 +2156,8 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                 }
               } catch (e) {
                 console.error('Failed to parse SSE data:', e);
+                // Check if this is a generation interruption
+                handleGenerationInterruption(e, generatedCode, buffer + line);
               }
             }
           }
@@ -3526,6 +3661,17 @@ Focus on the key sections and content, making it clean and modern.`;
 
 
     </div>
+    
+    {/* Generation Recovery Dialog */}
+    <GenerationRecoveryDialog
+      isOpen={interruptionData?.hasInterruption || false}
+      partialFiles={interruptionData?.parsedFiles || []}
+      onResume={handleResumeGeneration}
+      onRestart={handleRestartGeneration}
+      onUsePartial={handleUsePartialCode}
+      onCancel={handleCancelRecovery}
+    />
+    
     </HeaderProvider>
   );
 }
