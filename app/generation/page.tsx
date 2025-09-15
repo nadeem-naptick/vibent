@@ -1713,8 +1713,11 @@ Tip: I automatically detect and install npm packages from your code imports (lik
   const handleGenerationInterruption = (error: any, partialCode: string, rawData: string) => {
     console.log('[interruption] Detected generation interruption:', error);
     
-    // Parse any partial files that were generated
-    const partialFiles: Array<{ path: string; content: string; type: string }> = [];
+    // Get files from generation progress (what's actually displayed in the sidebar)
+    const generatedFiles = generationProgress.files || [];
+    
+    // Also parse any additional partial files from the raw stream
+    const streamParsedFiles: Array<{ path: string; content: string; type: string }> = [];
     const fileRegex = /<file path="([^"]+)">([^]*?)(?:<\/file>|$)/g;
     let match;
     
@@ -1727,8 +1730,19 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                       fileExt === 'json' ? 'json' :
                       fileExt === 'html' ? 'html' : 'text';
       
-      partialFiles.push({ path: filePath, content, type: fileType });
+      streamParsedFiles.push({ path: filePath, content, type: fileType });
     }
+    
+    // Combine both sources, prioritizing the generated files from progress
+    const allFiles = [...generatedFiles];
+    
+    // Add any stream-parsed files that aren't already in the generated files
+    streamParsedFiles.forEach(streamFile => {
+      const exists = allFiles.some(f => f.path === streamFile.path);
+      if (!exists) {
+        allFiles.push(streamFile);
+      }
+    });
     
     // Store interruption data for recovery
     setInterruptionData({
@@ -1736,7 +1750,9 @@ Tip: I automatically detect and install npm packages from your code imports (lik
       partialCode,
       error,
       originalPrompt: aiChatInput,
-      parsedFiles: partialFiles
+      parsedFiles: allFiles,
+      targetUrl: targetUrl || urlInput, // Include the URL being cloned
+      context: conversationContext // Include conversation context
     });
     
     // Update generation progress to show interruption
@@ -1744,10 +1760,10 @@ Tip: I automatically detect and install npm packages from your code imports (lik
       ...prev,
       isGenerating: false,
       isStreaming: false,
-      status: `Generation interrupted (${partialFiles.length} files partially generated)`
+      status: `Generation interrupted (${allFiles.length} files partially generated)`
     }));
     
-    console.log(`[interruption] Preserved ${partialFiles.length} partial files for recovery`);
+    console.log(`[interruption] Preserved ${allFiles.length} partial files for recovery`);
   };
 
   // Recovery action handlers
@@ -3113,6 +3129,10 @@ Focus on the key sections and content, making it clean and modern.`;
                 }
               } catch (e) {
                 console.error('Failed to parse SSE data:', e);
+                // Check if this is a generation interruption - get current streaming data
+                const currentStreamedCode = generationProgress.streamedCode || '';
+                const fullPartialCode = generatedCode || currentStreamedCode;
+                handleGenerationInterruption(e, fullPartialCode, line);
               }
             }
           }
@@ -3157,6 +3177,17 @@ Focus on the key sections and content, making it clean and modern.`;
             }]
           }));
         } else {
+          // Check if we have partial streaming data that could indicate an interruption
+          const currentStreamedCode = generationProgress.streamedCode || '';
+          if (currentStreamedCode.trim().length > 0) {
+            console.log('[clone] No complete generatedCode but found streaming data, triggering recovery...');
+            handleGenerationInterruption(
+              new Error('Generation completed without final code'), 
+              currentStreamedCode, 
+              'Incomplete generation detected'
+            );
+            return; // Don't throw error, let recovery dialog handle it
+          }
           throw new Error('Failed to generate recreation');
         }
         
@@ -3666,6 +3697,8 @@ Focus on the key sections and content, making it clean and modern.`;
     <GenerationRecoveryDialog
       isOpen={interruptionData?.hasInterruption || false}
       partialFiles={interruptionData?.parsedFiles || []}
+      targetUrl={interruptionData?.targetUrl}
+      context={interruptionData?.context}
       onResume={handleResumeGeneration}
       onRestart={handleRestartGeneration}
       onUsePartial={handleUsePartialCode}
