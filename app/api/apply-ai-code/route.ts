@@ -15,6 +15,60 @@ interface ParsedResponse {
   structure: string | null;
 }
 
+// Function to ensure main.jsx always imports index.css
+function ensureCssImport(files: Array<{ path: string; content: string }>): Array<{ path: string; content: string }> {
+  const mainJsxIndex = files.findIndex(f => f.path === 'src/main.jsx' || f.path === 'main.jsx');
+  const indexCssExists = files.some(f => f.path === 'src/index.css' || f.path === 'index.css');
+  
+  if (mainJsxIndex !== -1 && indexCssExists) {
+    const mainFile = files[mainJsxIndex];
+    
+    // More robust check for CSS import - check for various formats
+    const cssImportRegex = /import\s+['"][^'"]*index\.css['"][;\s]*$/m;
+    const hasIndexCssImport = cssImportRegex.test(mainFile.content);
+    
+    if (!hasIndexCssImport) {
+      console.log('[apply-ai-code] ⚠️ main.jsx missing index.css import - auto-fixing...');
+      
+      // Remove any existing comments about CSS import to avoid confusion
+      let content = mainFile.content.replace(/\/\/.*CRITICAL.*import.*REQUIRED.*Tailwind.*\n?/gi, '');
+      
+      const lines = content.split('\n');
+      let insertIndex = -1;
+      
+      // Find the best position: after App import or after last import
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim().startsWith('import ')) {
+          insertIndex = i;
+          // If this is the App import, insert right after it
+          if (lines[i].includes('./App')) {
+            break;
+          }
+        }
+        // Stop if we hit ReactDOM.createRoot
+        if (lines[i].includes('ReactDOM.createRoot')) {
+          break;
+        }
+      }
+      
+      if (insertIndex !== -1) {
+        // Insert after the identified import line
+        lines.splice(insertIndex + 1, 0, "import './index.css'");
+        files[mainJsxIndex].content = lines.join('\n');
+        console.log('[apply-ai-code] ✅ Added missing index.css import to main.jsx after line', insertIndex + 1);
+      } else {
+        // Fallback: add at the beginning
+        files[mainJsxIndex].content = "import './index.css'\n" + content;
+        console.log('[apply-ai-code] ✅ Added index.css import at the beginning of main.jsx');
+      }
+    } else {
+      console.log('[apply-ai-code] ✅ main.jsx already has index.css import');
+    }
+  }
+  
+  return files;
+}
+
 function parseAIResponse(response: string): ParsedResponse {
   const sections = {
     files: [] as Array<{ path: string; content: string }>,
@@ -122,6 +176,9 @@ function parseAIResponse(response: string): ParsedResponse {
   if (templResult) {
     sections.template = templResult[1].trim();
   }
+
+  // Ensure main.jsx imports index.css before returning
+  sections.files = ensureCssImport(sections.files);
 
   return sections;
 }
