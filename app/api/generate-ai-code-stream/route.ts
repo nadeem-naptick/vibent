@@ -824,6 +824,12 @@ CRITICAL: When asked to create a React app or components:
 - If you're recreating a website, implement ALL sections and features completely
 - NEVER create tailwind.config.js - it's already configured in the template
 - ALWAYS include a Navigation/Header component (Nav.jsx or Header.jsx) - websites need navigation!
+- ALWAYS create src/main.jsx with import './index.css' - WITHOUT THIS IMPORT, TAILWIND WON'T WORK!
+
+REQUIRED FILES for ANY React app (NEVER SKIP THESE):
+1. src/index.css - Contains Tailwind directives (@tailwind base/components/utilities)
+2. src/main.jsx - MUST import './index.css' or Tailwind CSS won't load!
+3. src/App.jsx - Main component that imports and arranges all components
 
 REQUIRED COMPONENTS for website clones:
 1. Nav.jsx or Header.jsx - Navigation bar with links (NEVER SKIP THIS!)
@@ -849,12 +855,25 @@ WHEN WORKING WITH SCRAPED CONTENT:
 
 When generating code, FOLLOW THIS PROCESS:
 1. ALWAYS generate src/index.css FIRST - this establishes the styling foundation
-2. List ALL components you plan to import in App.jsx
-3. Count them - if there are 10 imports, you MUST create 10 component files
-4. Generate src/index.css first (with proper CSS reset and base styles)
-5. Generate App.jsx second
-6. Then generate EVERY SINGLE component file you imported
-7. Do NOT stop until all imports are satisfied
+2. ALWAYS generate src/main.jsx that imports './index.css' - THIS IS CRITICAL!
+3. List ALL components you plan to import in App.jsx
+4. Count them - if there are 10 imports, you MUST create 10 component files
+5. Generate src/index.css first (with proper CSS reset and base styles)
+6. Generate src/main.jsx second (MUST import './index.css')
+7. Generate App.jsx third
+8. Then generate EVERY SINGLE component file you imported
+9. Do NOT stop until all imports are satisfied
+
+CRITICAL main.jsx REQUIREMENTS (FAILURE TO FOLLOW = BROKEN APP):
+- src/main.jsx MUST ALWAYS have the exact line: import './index.css'
+- This MUST be a real import statement, NOT a comment
+- Without this import, Tailwind CSS will NOT work and the app will have no styling
+- NEVER write comments about the import - just include the actual import line
+- Example of CORRECT main.jsx:
+  import React from 'react'
+  import ReactDOM from 'react-dom/client'
+  import App from './App.jsx'
+  import './index.css'
 
 Use this XML format for React components only (DO NOT create tailwind.config.js - it already exists):
 
@@ -862,6 +881,19 @@ Use this XML format for React components only (DO NOT create tailwind.config.js 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+</file>
+
+<file path="src/main.jsx">
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
 </file>
 
 <file path="src/App.jsx">
@@ -1276,7 +1308,7 @@ If you're running out of space, generate FEWER files but make them COMPLETE.
 It's better to have 3 complete files than 10 incomplete files.`
             }
           ],
-          maxTokens: 8192, // Reduce to ensure completion
+          maxTokens: 24576, // Optimal for complete React applications (75% of GPT-5's max)
           stopSequences: [] // Don't stop early
           // Note: Neither Groq nor Anthropic models support tool/function calling in this context
           // We use XML tags for package detection instead
@@ -1535,6 +1567,60 @@ It's better to have 3 complete files than 10 incomplete files.`
           return packages;
         }
         
+        // Function to ensure main.jsx always imports index.css
+        function ensureCssImportInStream(files: Array<{ path: string; content: string }>): Array<{ path: string; content: string }> {
+          const mainJsxIndex = files.findIndex(f => f.path === 'src/main.jsx' || f.path === 'main.jsx');
+          const indexCssExists = files.some(f => f.path === 'src/index.css' || f.path === 'index.css');
+          
+          if (mainJsxIndex !== -1 && indexCssExists) {
+            const mainFile = files[mainJsxIndex];
+            
+            // More robust check for CSS import - check for various formats
+            const cssImportRegex = /import\s+['"][^'"]*index\.css['"][;\s]*$/m;
+            const hasIndexCssImport = cssImportRegex.test(mainFile.content);
+            
+            if (!hasIndexCssImport) {
+              console.log('[generate-ai-code-stream] ⚠️ main.jsx missing index.css import - auto-fixing...');
+              
+              // Remove any existing comments about CSS import to avoid confusion
+              let content = mainFile.content.replace(/\/\/.*CRITICAL.*import.*REQUIRED.*Tailwind.*\n?/gi, '');
+              
+              const lines = content.split('\n');
+              let insertIndex = -1;
+              
+              // Find the best position: after App import or after last import
+              for (let i = 0; i < lines.length; i++) {
+                if (lines[i].trim().startsWith('import ')) {
+                  insertIndex = i;
+                  // If this is the App import, insert right after it
+                  if (lines[i].includes('./App')) {
+                    break;
+                  }
+                }
+                // Stop if we hit ReactDOM.createRoot
+                if (lines[i].includes('ReactDOM.createRoot')) {
+                  break;
+                }
+              }
+              
+              if (insertIndex !== -1) {
+                // Insert after the identified import line
+                lines.splice(insertIndex + 1, 0, "import './index.css'");
+                files[mainJsxIndex].content = lines.join('\n');
+                console.log('[generate-ai-code-stream] ✅ Added missing index.css import to main.jsx after line', insertIndex + 1);
+              } else {
+                // Fallback: add at the beginning
+                files[mainJsxIndex].content = "import './index.css'\n" + content;
+                console.log('[generate-ai-code-stream] ✅ Added index.css import at the beginning of main.jsx');
+              }
+            } else {
+              console.log('[generate-ai-code-stream] ✅ main.jsx already has index.css import');
+            }
+          }
+          
+          return files;
+        }
+
         // Parse files and send progress for each
         const fileRegex = /<file path="([^"]+)">([\s\S]*?)<\/file>/g;
         const files = [];
@@ -1579,6 +1665,9 @@ It's better to have 3 complete files than 10 incomplete files.`
           }
         }
         
+        // CRITICAL: Ensure main.jsx imports index.css before proceeding
+        const validatedFiles = ensureCssImportInStream(files);
+        
         // Extract explanation
         const explanationMatch = generatedCode.match(/<explanation>([\s\S]*?)<\/explanation>/);
         const explanation = explanationMatch ? explanationMatch[1].trim() : 'Code generated successfully!';
@@ -1596,11 +1685,10 @@ It's better to have 3 complete files than 10 incomplete files.`
         }
         
         // Check for files that seem truncated (very short or ending abruptly)
-        const truncationCheckRegex = /<file path="([^"]+)">([\s\S]*?)(?:<\/file>|$)/g;
-        let truncationMatch;
-        while ((truncationMatch = truncationCheckRegex.exec(generatedCode)) !== null) {
-          const filePath = truncationMatch[1];
-          const content = truncationMatch[2];
+        // Use validatedFiles for checking since they may have been modified
+        for (const file of validatedFiles) {
+          const filePath = file.path;
+          const content = file.content;
           
           // Only check for really obvious HTML truncation - file ends with opening tag
           if (content.trim().endsWith('<') || content.trim().endsWith('</')) {
@@ -1780,12 +1868,12 @@ Provide the complete file content without any truncation. Include all necessary 
           }
         }
         
-        // Send completion with packages info
+        // Send completion with packages info (using validated files)
         await sendProgress({ 
           type: 'complete', 
           generatedCode,
           explanation,
-          files: files.length,
+          files: validatedFiles.length,
           components: componentCount,
           model,
           packagesToInstall: packagesToInstall.length > 0 ? packagesToInstall : undefined,

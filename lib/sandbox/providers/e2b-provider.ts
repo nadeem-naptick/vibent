@@ -157,11 +157,45 @@ export class E2BProvider extends SandboxProvider {
 
     const fullPath = path.startsWith('/') ? path : `/home/user/app/${path}`;
     
+    // BULLETPROOF FIX: If writing main.jsx, ensure it ALWAYS has CSS import
+    let finalContent = content;
+    if (path === 'src/main.jsx' || path === 'main.jsx') {
+      const hasIndexCssImport = /import\s+['"][^'"]*index\.css['"][;\s]*$/m.test(content);
+      if (!hasIndexCssImport) {
+        console.log('[E2BProvider] ⚠️ main.jsx missing index.css import - auto-fixing...');
+        
+        // Find where to insert the import (after App import or after last import)
+        const lines = content.split('\n');
+        let insertIndex = -1;
+        
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].trim().startsWith('import ')) {
+            insertIndex = i;
+            if (lines[i].includes('./App')) {
+              break;
+            }
+          }
+          if (lines[i].includes('ReactDOM.createRoot')) {
+            break;
+          }
+        }
+        
+        if (insertIndex !== -1) {
+          lines.splice(insertIndex + 1, 0, "import './index.css'");
+          finalContent = lines.join('\n');
+          console.log('[E2BProvider] ✅ Fixed: Added missing index.css import to main.jsx');
+        } else {
+          finalContent = "import './index.css'\n" + content;
+          console.log('[E2BProvider] ✅ Fixed: Added index.css import at beginning of main.jsx');
+        }
+      }
+    }
+    
     // Use the E2B filesystem API to write the file
     // Note: E2B SDK uses files.write() method
     if ((this.sandbox as any).files && typeof (this.sandbox as any).files.write === 'function') {
       // Use the files.write API if available
-      await (this.sandbox as any).files.write(fullPath, Buffer.from(content));
+      await (this.sandbox as any).files.write(fullPath, Buffer.from(finalContent));
     } else {
       // Fallback to Python code execution
       await this.sandbox.runCode(`
@@ -173,7 +207,7 @@ export class E2BProvider extends SandboxProvider {
 
         # Write file
         with open("${fullPath}", 'w') as f:
-            f.write(${JSON.stringify(content)})
+            f.write(${JSON.stringify(finalContent)})
         print(f"✓ Written: ${fullPath}")
       `);
     }

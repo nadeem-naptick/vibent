@@ -217,16 +217,12 @@ export default function HomePage() {
                 <HeaderBrandKit />
               </div>
               <div className="flex gap-8">
-                <a
-                  className="contents"
-                  href="https://github.com/mendableai/open-lovable"
-                  target="_blank"
+                <button 
+                  onClick={() => window.location.href = '/generation'}
+                  className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg px-6 py-2 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95"
                 >
-                  <ButtonUI variant="tertiary">
-                    <GithubIcon />
-                    Use this Template
-                  </ButtonUI>
-                </a>
+                  Navigate to Chat Builder
+                </button>
               </div>
             </div>
           </HeaderWrapper>
@@ -242,17 +238,17 @@ export default function HomePage() {
 
             <div className="relative container px-16">
               <HomeHeroBadge />
-              <HomeHeroTitle />
-              <p className="text-center text-body-large">
-                Re-imagine any website, in seconds.
-              </p>
-              <Link
-                className="bg-black-alpha-4 hover:bg-black-alpha-6 rounded-6 px-8 lg:px-6 text-label-large h-30 lg:h-24 block mt-8 mx-auto w-max gap-4 transition-all"
-                href="#"
-                onClick={(e) => e.preventDefault()}
-              >
-                Powered by Firecrawl.
-              </Link>
+              <div className="text-center mb-6">
+                <h1 className="text-4xl lg:text-6xl font-bold text-gray-900 mb-12">
+                  Ship Faster. <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">Test More.</span>
+                </h1>
+                <p className="text-xl lg:text-2xl text-gray-600 mb-10">
+                  Go from concept to live website in <span className="font-bold text-orange-600">minutes</span>, not months
+                </p>
+                <p className="text-lg text-gray-500">
+                  ⚡ Zero Dev Dependencies • 🚀 Instant MVPs • 📊 Data-Driven Iterations
+                </p>
+              </div>
             </div>
           </div>
 
@@ -331,35 +327,34 @@ export default function HomePage() {
                   ) : (
                     <>
                       {isURL(url) ? (
-                        // Scrape icon for URLs
+                        // Clone icon for URLs
                         <svg 
                           width="20" 
                           height="20" 
                           viewBox="0 0 20 20" 
                           fill="none" 
                           xmlns="http://www.w3.org/2000/svg"
-                          className="opacity-40 flex-shrink-0"
+                          className="text-blue-500 flex-shrink-0"
                         >
                           <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
                           <path d="M7 10L9 12L13 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                       ) : (
-                        // Search icon for search terms
+                        // AI generation icon for prompts
                         <svg 
                           width="20" 
                           height="20" 
                           viewBox="0 0 20 20" 
                           fill="none" 
                           xmlns="http://www.w3.org/2000/svg"
-                          className="opacity-40 flex-shrink-0"
+                          className="text-purple-500 flex-shrink-0"
                         >
-                          <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.5"/>
-                          <path d="M12.5 12.5L16.5 16.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                          <path d="M10 2L12 8L18 10L12 12L10 18L8 12L2 10L8 8L10 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                       )}
                       <input
                         className="flex-1 bg-transparent text-body-input text-accent-black placeholder:text-black-alpha-48 focus:outline-none focus:ring-0 focus:border-transparent"
-                        placeholder="Enter URL or search term..."
+                        placeholder="Describe your website or enter URL to clone..."
                         type="text"
                         value={url}
                         disabled={isSearching}
@@ -397,11 +392,22 @@ export default function HomePage() {
                       >
                         <HeroInputSubmitButton 
                           dirty={url.length > 0} 
-                          buttonText={isURL(url) ? 'Scrape Site' : 'Search'} 
+                          buttonText={isURL(url) ? 'Clone Website' : 'Generate Site'} 
                           disabled={isSearching}
                         />
                       </div>
                     </>
+                  )}
+                </div>
+                
+                {/* Helper text below input */}
+                <div className="px-4 pb-3 text-xs text-gray-500 text-center">
+                  {url.length === 0 ? (
+                    "Please enter keywords to search the website template or enter URL."
+                  ) : isURL(url) ? (
+                    <span className="text-blue-600 font-medium">Ready to clone website from URL</span>
+                  ) : (
+                    <span className="text-purple-600 font-medium">Ready to generate website from description</span>
                   )}
                 </div>
 
@@ -751,6 +757,7 @@ export default function HomePage() {
             )}
           </section>
         )}
+
 
       </div>
 
