@@ -26,7 +26,8 @@ import HeaderBrandKit from "@/components/shared/header/BrandKit/BrandKit";
 import HeaderWrapper from "@/components/shared/header/Wrapper/Wrapper";
 import HeaderDropdownWrapper from "@/components/shared/header/Dropdown/Wrapper/Wrapper";
 import GithubIcon from "@/components/shared/header/Github/_svg/GithubIcon";
-import ButtonUI from "@/components/ui/shadcn/button"
+import ButtonUI from "@/components/ui/shadcn/button";
+import ProjectGallery from "@/components/ProjectGallery";
 
 interface SearchResult {
   url: string;
@@ -49,6 +50,7 @@ export default function HomePage() {
   const [showSelectMessage, setShowSelectMessage] = useState<boolean>(false);
   const [showInstructionsForIndex, setShowInstructionsForIndex] = useState<number | null>(null);
   const [additionalInstructions, setAdditionalInstructions] = useState<string>('');
+  const [showProjectGallery, setShowProjectGallery] = useState<boolean>(false);
   const router = useRouter();
   
   // Simple URL validation
@@ -216,7 +218,16 @@ export default function HomePage() {
               <div className="flex gap-24 items-center">
                 <HeaderBrandKit />
               </div>
-              <div className="flex gap-8">
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowProjectGallery(true)}
+                  className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  Recently Generated
+                </button>
                 <button 
                   onClick={() => window.location.href = '/generation'}
                   className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg px-6 py-2 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95"
@@ -808,6 +819,12 @@ export default function HomePage() {
           animation: shimmer 2s infinite;
         }
       `}</style>
+
+      {/* Project Gallery Modal */}
+      <ProjectGallery
+        isOpen={showProjectGallery}
+        onClose={() => setShowProjectGallery(false)}
+      />
     </HeaderProvider>
   );
 }

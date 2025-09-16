@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 });
     }
 
-    // Use Firecrawl search to get top 10 results with screenshots
+    // Use Firecrawl search to get top 20 results with screenshots
     const searchResponse = await fetch('https://api.firecrawl.dev/v1/search', {
       method: 'POST',
       headers: {
@@ -17,10 +17,10 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         query,
-        limit: 10,
+        limit: 20,
         scrapeOptions: {
           formats: ['markdown', 'screenshot'],
-          onlyMainContent: true,
+          onlyMainContent: false,
         },
       }),
     });

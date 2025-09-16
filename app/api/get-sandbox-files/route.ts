@@ -48,7 +48,7 @@ export async function GET() {
       throw new Error('Failed to list files');
     }
     
-    const fileList = (await findResult.stdout()).split('\n').filter((f: string) => f.trim());
+    const fileList = findResult.stdout.split('\n').filter((f: string) => f.trim());
     console.log('[get-sandbox-files] Found', fileList.length, 'files');
     
     // Read content of each file (limit to reasonable sizes)
