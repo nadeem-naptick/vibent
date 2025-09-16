@@ -228,11 +228,15 @@ export default function ProjectGallery({ isOpen, onClose }: ProjectGalleryProps)
                       {/* Actions */}
                       <div className="flex gap-2">
                         <a
-                          href={project.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-sm py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
-                          disabled={project.status !== 'ready'}
+                          href={project.status === 'ready' ? project.url : '#'}
+                          target={project.status === 'ready' ? "_blank" : undefined}
+                          rel={project.status === 'ready' ? "noopener noreferrer" : undefined}
+                          className={`flex-1 text-sm py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-colors ${
+                            project.status === 'ready' 
+                              ? 'bg-blue-500 hover:bg-blue-600 text-white cursor-pointer' 
+                              : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                          }`}
+                          onClick={project.status !== 'ready' ? (e) => e.preventDefault() : undefined}
                         >
                           <FiExternalLink className="w-4 h-4" />
                           View Live
