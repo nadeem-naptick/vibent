@@ -123,7 +123,7 @@ export default function AutoSave({
       toast.error(
         <div className="flex flex-col gap-1">
           <div className="font-medium">Save Failed</div>
-          <div className="text-sm opacity-80">{error.message}</div>
+          <div className="text-sm opacity-80">{error instanceof Error ? error.message : 'Unknown error'}</div>
         </div>
       );
     }

@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error('[projects/list] Error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch projects', details: error.message },
+      { error: 'Failed to fetch projects', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

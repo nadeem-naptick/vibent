@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     
     // Queue deployment job for EC2 service to process
     if (projectData.zipData) {
-      await queueDeploymentJob(projectId, null, projectData.zipData);
+      await queueDeploymentJob(projectId, undefined, projectData.zipData);
     } else {
       await queueDeploymentJob(projectId, projectData.files);
     }
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('[save-and-host] Error:', error);
     return NextResponse.json(
-      { error: 'Failed to save project', details: error.message },
+      { error: 'Failed to save project', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
@@ -146,7 +146,7 @@ async function queueDeploymentJob(projectId: string, files?: any[], zipData?: an
 }
 
 // Get Redis client (for production use)
-async function getRedisClient() {
+async function getRedisClient(): Promise<any> {
   // This would import and configure Redis client
   // For now, just a placeholder
   throw new Error('Redis client not implemented yet - using direct HTTP calls');

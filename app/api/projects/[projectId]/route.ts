@@ -4,10 +4,10 @@ import { formatProjectForResponse } from '@/lib/project-utils';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { projectId: string } }
+  { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
-    const { projectId } = params;
+    const { projectId } = await params;
     
     if (!projectId) {
       return NextResponse.json(
@@ -50,9 +50,9 @@ export async function GET(
     });
     
   } catch (error) {
-    console.error(`[projects/${params?.projectId}] Error:`, error);
+    console.error(`[projects] Error:`, error);
     return NextResponse.json(
-      { error: 'Failed to fetch project details', details: error.message },
+      { error: 'Failed to fetch project details', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
@@ -61,10 +61,10 @@ export async function GET(
 // DELETE endpoint for project deletion (optional - for admin use)
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { projectId: string } }
+  { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
-    const { projectId } = params;
+    const { projectId } = await params;
     
     // Add authentication check here if needed
     // const adminKey = req.headers.get('x-admin-key');
@@ -90,9 +90,9 @@ export async function DELETE(
     });
     
   } catch (error) {
-    console.error(`[projects/${params?.projectId}] DELETE Error:`, error);
+    console.error(`[projects] DELETE Error:`, error);
     return NextResponse.json(
-      { error: 'Failed to delete project', details: error.message },
+      { error: 'Failed to delete project', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
