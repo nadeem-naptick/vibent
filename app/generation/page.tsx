@@ -2398,6 +2398,75 @@ Please complete any remaining components or files that are needed for a fully fu
     }
   };
 
+  const publishApp = async () => {
+    if (!sandboxData) {
+      addChatMessage('Please wait for the sandbox to be created before publishing.', 'system');
+      return;
+    }
+    
+    setLoading(true);
+    log('Publishing app to EC2...');
+    addChatMessage('Publishing your app to EC2...', 'system');
+    
+    try {
+      // Get the current sandbox state as a zip file (proven approach)
+      const zipResponse = await fetch('/api/create-zip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const zipData = await zipResponse.json();
+      
+      if (!zipData.success) {
+        throw new Error(zipData.error || 'Failed to create project zip');
+      }
+      
+      log('Project zip created successfully, publishing to EC2...');
+      
+      // Send the zip data to our deployment service
+      const publishResponse = await fetch('/api/projects/save-and-host', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          zipData: {
+            dataUrl: zipData.dataUrl,
+            fileName: zipData.fileName || 'project.zip'
+          },
+          metadata: {
+            prompt: aiChatInput,
+            sourceUrl: targetUrl || urlInput,
+            aiModel: aiModel,
+            timestamp: new Date().toISOString()
+          }
+        }),
+      });
+
+      if (!publishResponse.ok) {
+        const errorData = await publishResponse.json();
+        throw new Error(errorData.error || 'Failed to publish project');
+      }
+
+      const result = await publishResponse.json();
+      
+      log('App published successfully!');
+      addChatMessage(
+        `🚀 App published successfully!\n\n` +
+        `Project ID: ${result.projectId}\n` +
+        `URL: ${result.url}\n\n` +
+        `Your app is being built and will be ready shortly. You can view it in the "Recently Generated" gallery.`,
+        'system'
+      );
+      
+    } catch (error: any) {
+      log(`Failed to publish app: ${error.message}`, 'error');
+      addChatMessage(`Failed to publish app: ${error.message}`, 'system');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const reapplyLastGeneration = async () => {
     if (!conversationContext.lastGeneratedCode) {
       addChatMessage('No previous generation to re-apply', 'system');
@@ -3359,6 +3428,16 @@ Focus on the key sections and content, making it clean and modern.`;
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
             </svg>
           </button>
+          <button 
+            onClick={publishApp}
+            disabled={!sandboxData || loading}
+            className="p-8 rounded-lg transition-colors bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Publish this app to EC2"
+          >
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18M13 8V4a2 2 0 00-2-2H5a2 2 0 00-2 2v4m6 0v8a2 2 0 002 2h6a2 2 0 002-2v-4" />
+            </svg>
+          </button>
        
         </div>
       </div>
@@ -3759,6 +3838,7 @@ Focus on the key sections and content, making it clean and modern.`;
 
 
     </div>
+    
     
     {/* Generation Recovery Dialog */}
     <GenerationRecoveryDialog

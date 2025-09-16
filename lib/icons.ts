@@ -5,7 +5,13 @@ export {
   FiFile, 
   FiChevronRight, 
   FiChevronDown,
-  FiGithub 
+  FiGithub,
+  FiCalendar,
+  FiCopy,
+  FiExternalLink,
+  FiEye,
+  FiSearch,
+  FiX
 } from 'react-icons/fi';
 
 export { 
