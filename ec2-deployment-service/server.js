@@ -306,6 +306,15 @@ export default defineConfig({
     throw new Error(`Build failed: ${error.message}`);
   }
 
+  // Step 3.5: Create symlinks for nginx compatibility
+  try {
+    await execAsync('ln -sf dist/index.html index.html', { cwd: projectPath });
+    await execAsync('ln -sf dist/assets assets', { cwd: projectPath });
+    console.log('[Deploy] Created symlinks for project ' + projectId);
+  } catch (error) {
+    console.warn('[Deploy] Warning: Could not create symlinks: ' + error.message);
+  }
+
   // Step 4: Configure nginx
   try {
     const nginxConfig = `
