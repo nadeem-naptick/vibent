@@ -28,6 +28,7 @@ import HeaderDropdownWrapper from "@/components/shared/header/Dropdown/Wrapper/W
 import GithubIcon from "@/components/shared/header/Github/_svg/GithubIcon";
 import ButtonUI from "@/components/ui/shadcn/button";
 import ProjectGallery from "@/components/ProjectGallery";
+import RecentProjectsGrid from "../components/RecentProjectsGrid";
 
 interface SearchResult {
   url: string;
@@ -848,6 +849,21 @@ export default function HomePage() {
           </section>
         )}
 
+        {/* Recent Projects Section */}
+        <section className="py-20 bg-gray-50">
+          <div className="container max-w-6xl mx-auto px-6">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                Recently Generated
+              </h2>
+              <p className="text-gray-600 text-lg">
+                Check out the latest projects created by our community
+              </p>
+            </div>
+            
+            <RecentProjectsGrid />
+          </div>
+        </section>
 
       </div>
 

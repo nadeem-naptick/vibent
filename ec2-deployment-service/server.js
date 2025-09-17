@@ -351,14 +351,154 @@ location /creation/${projectId}/ {
     // Don't fail deployment for nginx issues
   }
 
-  // Step 5: Generate thumbnail (placeholder for now)
-  const thumbnail = generatePlaceholderThumbnail(projectId);
+  // Step 5: Generate real screenshot thumbnail
   const url = `${process.env.PROJECT_BASE_URL || 'http://localhost:3000'}/creation/${projectId}`;
+  const thumbnail = await captureProjectScreenshot(url);
 
   return {
     url,
     thumbnail
   };
+}
+
+// Capture real screenshot thumbnail with retry logic and better error handling
+async function captureProjectScreenshot(url, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[Screenshot] Attempt ${attempt}/${maxRetries} - Capturing screenshot for ${url}`);
+      
+      // Wait longer for the site to be fully available, with exponential backoff
+      const waitTime = 3000 * attempt;
+      console.log(`[Screenshot] Waiting ${waitTime}ms for site to be ready...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      
+      const apiKey = process.env.FIRECRAWL_API_KEY;
+      if (!apiKey) {
+        console.warn('[Screenshot] No Firecrawl API key, using placeholder');
+        return generatePlaceholderThumbnail('deployed');
+      }
+
+      // Try different screenshot approaches
+      const approaches = [
+        // Approach 1: Full page screenshot with actions
+        {
+          name: 'full-page-with-actions',
+          config: {
+            url,
+            formats: ['screenshot'],
+            onlyMainContent: false,
+            timeout: 45000,
+            actions: [
+              {
+                type: 'wait',
+                milliseconds: 2000
+              },
+              {
+                type: 'screenshot',
+                fullPage: true
+              }
+            ]
+          }
+        },
+        // Approach 2: Simple screenshot format
+        {
+          name: 'simple-screenshot',
+          config: {
+            url,
+            formats: ['screenshot'],
+            onlyMainContent: false,
+            timeout: 30000
+          }
+        },
+        // Approach 3: Screenshot with viewport
+        {
+          name: 'viewport-screenshot',
+          config: {
+            url,
+            formats: ['screenshot'],
+            onlyMainContent: false,
+            timeout: 30000,
+            actions: [
+              {
+                type: 'screenshot',
+                selector: 'body'
+              }
+            ]
+          }
+        }
+      ];
+
+      for (const approach of approaches) {
+        try {
+          console.log(`[Screenshot] Trying approach: ${approach.name}`);
+          
+          const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(approach.config)
+          });
+
+          console.log(`[Screenshot] Response status: ${scrapeResponse.status}`);
+          
+          if (!scrapeResponse.ok) {
+            const errorText = await scrapeResponse.text();
+            console.warn(`[Screenshot] Firecrawl API error (${approach.name}): ${scrapeResponse.status} - ${errorText}`);
+            continue; // Try next approach
+          }
+
+          const scrapeResult = await scrapeResponse.json();
+          console.log(`[Screenshot] Response keys: ${Object.keys(scrapeResult)}`);
+          
+          // Check for screenshot in multiple possible locations
+          let screenshot = null;
+          if (scrapeResult?.data?.screenshot) {
+            screenshot = scrapeResult.data.screenshot;
+            console.log('[Screenshot] Found screenshot in data.screenshot');
+          } else if (scrapeResult?.data?.actions?.[0]?.screenshots?.[0]) {
+            screenshot = scrapeResult.data.actions[0].screenshots[0];
+            console.log('[Screenshot] Found screenshot in actions.screenshots');
+          } else if (scrapeResult?.screenshot) {
+            screenshot = scrapeResult.screenshot;
+            console.log('[Screenshot] Found screenshot in root.screenshot');
+          }
+          
+          if (screenshot && screenshot.startsWith('http')) {
+            console.log(`[Screenshot] Successfully captured screenshot using ${approach.name}`);
+            return screenshot;
+          } else if (screenshot) {
+            console.log(`[Screenshot] Got screenshot but invalid format: ${screenshot.substring(0, 100)}...`);
+          }
+          
+        } catch (approachError) {
+          console.error(`[Screenshot] Approach ${approach.name} failed:`, approachError.message);
+          continue;
+        }
+      }
+      
+      console.warn(`[Screenshot] All approaches failed on attempt ${attempt}`);
+      
+      if (attempt < maxRetries) {
+        const retryDelay = 5000 * attempt;
+        console.log(`[Screenshot] Retrying in ${retryDelay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+      
+    } catch (error) {
+      console.error(`[Screenshot] Attempt ${attempt} failed:`, error.message);
+      
+      if (attempt < maxRetries) {
+        const retryDelay = 5000 * attempt;
+        console.log(`[Screenshot] Retrying in ${retryDelay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+  }
+  
+  console.warn(`[Screenshot] All ${maxRetries} attempts failed, using placeholder`);
+  return generatePlaceholderThumbnail('deployed');
 }
 
 // Generate placeholder thumbnail

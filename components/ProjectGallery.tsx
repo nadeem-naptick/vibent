@@ -28,6 +28,8 @@ export default function ProjectGallery({ isOpen, onClose }: ProjectGalleryProps)
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'ready' | 'building' | 'failed'>('ready');
+  const [isUpdatingThumbnails, setIsUpdatingThumbnails] = useState(false);
+  const [thumbnailUpdateStatus, setThumbnailUpdateStatus] = useState<string | null>(null);
 
   // Fetch projects
   const fetchProjects = async () => {
@@ -92,6 +94,43 @@ export default function ProjectGallery({ isOpen, onClose }: ProjectGalleryProps)
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  // Update thumbnails for all existing projects
+  const updateAllThumbnails = async () => {
+    setIsUpdatingThumbnails(true);
+    setThumbnailUpdateStatus('Starting thumbnail updates...');
+    
+    try {
+      const response = await fetch('/api/projects/update-thumbnails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ updateAll: true }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setThumbnailUpdateStatus(data.message);
+        // Refresh projects list to show updated thumbnails
+        setTimeout(() => {
+          fetchProjects();
+        }, 2000);
+      } else {
+        const error = await response.json();
+        setThumbnailUpdateStatus(`Error: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to update thumbnails:', error);
+      setThumbnailUpdateStatus('Failed to update thumbnails');
+    } finally {
+      setIsUpdatingThumbnails(false);
+      // Clear status after 5 seconds
+      setTimeout(() => {
+        setThumbnailUpdateStatus(null);
+      }, 5000);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -148,7 +187,26 @@ export default function ProjectGallery({ isOpen, onClose }: ProjectGalleryProps)
                 <option value="failed">Failed</option>
                 <option value="all">All</option>
               </select>
+              
+              <button
+                onClick={updateAllThumbnails}
+                disabled={isUpdatingThumbnails}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isUpdatingThumbnails
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-orange-500 hover:bg-orange-600 text-white'
+                }`}
+              >
+                {isUpdatingThumbnails ? 'Updating...' : 'Update Thumbnails'}
+              </button>
             </div>
+            
+            {/* Thumbnail update status */}
+            {thumbnailUpdateStatus && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">{thumbnailUpdateStatus}</p>
+              </div>
+            )}
           </div>
 
           {/* Content */}
