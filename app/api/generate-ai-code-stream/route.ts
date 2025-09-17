@@ -3,6 +3,7 @@ import { createGroq } from '@ai-sdk/groq';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createClaudeCode } from 'ai-sdk-provider-claude-code';
 import { streamText } from 'ai';
 import type { SandboxState } from '@/types/sandbox';
 import { selectFilesForEdit, getFileContents, formatFilesForAI } from '@/lib/context-selector';
@@ -42,6 +43,10 @@ const googleGenerativeAI = createGoogleGenerativeAI({
 const openai = createOpenAI({
   apiKey: process.env.AI_GATEWAY_API_KEY ?? process.env.OPENAI_API_KEY,
   baseURL: isUsingAIGateway ? aiGatewayBaseURL : process.env.OPENAI_BASE_URL,
+});
+
+const claudeCode = createClaudeCode({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 // Helper function to analyze user preferences from conversation history
@@ -1220,10 +1225,12 @@ CRITICAL: When files are provided in the context:
         const isGoogle = model.startsWith('google/');
         const isOpenAI = model.startsWith('openai/');
         const isKimiGroq = model === 'moonshotai/kimi-k2-instruct-0905';
+        const isClaudeCodeSDK = model.startsWith('claude-code-sdk/');
         const modelProvider = isAnthropic ? anthropic : 
                               (isOpenAI ? openai : 
                               (isGoogle ? googleGenerativeAI : 
-                              (isKimiGroq ? groq : groq)));
+                              (isKimiGroq ? groq : 
+                              (isClaudeCodeSDK ? claudeCode : groq))));
         
         // Fix model name transformation for different providers
         let actualModel: string;
@@ -1237,11 +1244,14 @@ CRITICAL: When files are provided in the context:
         } else if (isGoogle) {
           // Google uses specific model names - convert our naming to theirs  
           actualModel = model.replace('google/', '');
+        } else if (isClaudeCodeSDK) {
+          // Claude Code SDK uses sonnet as model name
+          actualModel = model.replace('claude-code-sdk/', '');
         } else {
           actualModel = model;
         }
 
-        console.log(`[generate-ai-code-stream] Using provider: ${isAnthropic ? 'Anthropic' : isGoogle ? 'Google' : isOpenAI ? 'OpenAI' : 'Groq'}, model: ${actualModel}`);
+        console.log(`[generate-ai-code-stream] Using provider: ${isAnthropic ? 'Anthropic' : isGoogle ? 'Google' : isOpenAI ? 'OpenAI' : isClaudeCodeSDK ? 'Claude Code SDK' : 'Groq'}, model: ${actualModel}`);
         console.log(`[generate-ai-code-stream] AI Gateway enabled: ${isUsingAIGateway}`);
         console.log(`[generate-ai-code-stream] Model string: ${model}`);
 
@@ -1368,7 +1378,7 @@ It's better to have 3 complete files than 10 incomplete files.`
               // Final error, send to user
               await sendProgress({ 
                 type: 'error', 
-                message: `Failed to initialize ${isGoogle ? 'Gemini' : isAnthropic ? 'Claude' : isOpenAI ? 'GPT-5' : isKimiGroq ? 'Kimi (Groq)' : 'Groq'} streaming: ${streamError.message}` 
+                message: `Failed to initialize ${isGoogle ? 'Gemini' : isAnthropic ? 'Claude' : isOpenAI ? 'GPT-5' : isKimiGroq ? 'Kimi (Groq)' : isClaudeCodeSDK ? 'Claude Code SDK' : 'Groq'} streaming: ${streamError.message}` 
               });
               
               // If this is a Google model error, provide helpful info
@@ -1788,8 +1798,10 @@ Provide the complete file content without any truncation. Include all necessary 
                 let completionClient;
                 if (model.includes('gpt') || model.includes('openai')) {
                   completionClient = openai;
-                } else if (model.includes('claude')) {
+                } else if (model.includes('claude') && !model.includes('claude-code-sdk')) {
                   completionClient = anthropic;
+                } else if (model.includes('claude-code-sdk')) {
+                  completionClient = claudeCode;
                 } else if (model === 'moonshotai/kimi-k2-instruct-0905') {
                   completionClient = groq;
                 } else {
@@ -1804,6 +1816,8 @@ Provide the complete file content without any truncation. Include all necessary 
                   completionModelName = model.replace('openai/', '');
                 } else if (model.includes('anthropic')) {
                   completionModelName = model.replace('anthropic/', '');
+                } else if (model.includes('claude-code-sdk')) {
+                  completionModelName = model.replace('claude-code-sdk/', '');
                 } else if (model.includes('google')) {
                   completionModelName = model.replace('google/', '');
                 } else {

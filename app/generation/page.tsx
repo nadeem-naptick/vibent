@@ -25,6 +25,8 @@ import {
 } from '@/lib/icons';
 import { motion } from 'framer-motion';
 import CodeApplicationProgress, { type CodeApplicationState } from '@/components/CodeApplicationProgress';
+import ClaudeCodeAgentStatus from '@/components/ClaudeCodeAgentStatus';
+import { useClaudeCodeAgent } from '@/hooks/useClaudeCodeAgent';
 
 interface SandboxData {
   sandboxId: string;
@@ -94,6 +96,9 @@ function AISandboxPage() {
   const [sandboxFiles, setSandboxFiles] = useState<Record<string, string>>({});
   const [hasInitialSubmission, setHasInitialSubmission] = useState<boolean>(false);
   const [fileStructure, setFileStructure] = useState<string>('');
+  
+  // Claude Code SDK Agent State
+  const { state: agentState, actions: agentActions } = useClaudeCodeAgent();
   
   const [conversationContext, setConversationContext] = useState<{
     scrapedWebsites: Array<{ url: string; content: any; timestamp: Date }>;
@@ -1994,6 +1999,12 @@ Please complete any remaining components or files that are needed for a fully fu
       console.log('[chat] - sandboxId:', fullContext.sandboxId);
       console.log('[chat] - isEdit:', conversationContext.appliedCode.length > 0);
       
+      // Initialize Claude Code SDK agent tracking
+      if (aiModel.startsWith('claude-code-sdk/')) {
+        agentActions.reset();
+        agentActions.simulateAgentThinking(message, aiModel);
+      }
+      
       const response = await fetch('/api/generate-ai-code-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2032,6 +2043,11 @@ Please complete any remaining components or files that are needed for a fully fu
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6));
+                
+                // Parse Claude Code SDK agent activities
+                if (aiModel.startsWith('claude-code-sdk/') && data.text) {
+                  agentActions.parseStreamingResponse(data.text, aiModel);
+                }
                 
                 if (data.type === 'status') {
                   setGenerationProgress(prev => ({ ...prev, status: data.message }));
@@ -2234,6 +2250,11 @@ Please complete any remaining components or files that are needed for a fully fu
                     // Keep the files that were already parsed during streaming
                     files: prev.files.length > 0 ? prev.files : parsedFiles
                   }));
+                  
+                  // Complete Claude Code SDK agent session
+                  if (aiModel.startsWith('claude-code-sdk/')) {
+                    agentActions.completeAgentSession();
+                  }
                 } else if (data.type === 'error') {
                   throw new Error(data.error);
                 }
@@ -3541,6 +3562,15 @@ Focus on the key sections and content, making it clean and modern.`;
               const scrollTop = e.currentTarget.scrollTop;
               setSidebarScrolled(scrollTop > 50);
             }}>
+            
+            {/* Claude Code SDK Agent Status */}
+            <ClaudeCodeAgentStatus
+              isActive={agentState.isActive}
+              activities={agentState.activities}
+              currentThought={agentState.currentThought}
+              toolsUsed={agentState.toolsUsed}
+            />
+            
             {chatMessages.map((msg, idx) => {
               // Check if this message is from a successful generation
               const isGenerationComplete = msg.content.includes('Successfully recreated') || 

@@ -58,6 +58,7 @@ export const appConfig = {
       'openai/gpt-5',
       'moonshotai/kimi-k2-instruct-0905',
       'anthropic/claude-sonnet-4-20250514',
+      'claude-code-sdk/sonnet',
       'google/gemini-2.0-flash-exp'
     ],
     
@@ -66,6 +67,7 @@ export const appConfig = {
       'openai/gpt-5': 'GPT-5',
       'moonshotai/kimi-k2-instruct-0905': 'Kimi K2 (Groq)',
       'anthropic/claude-sonnet-4-20250514': 'Sonnet 4',
+      'claude-code-sdk/sonnet': 'Claude Code SDK (Agents)',
       'google/gemini-2.0-flash-exp': 'Gemini 2.0 Flash (Experimental)'
     } as Record<string, string>,
     
@@ -74,6 +76,10 @@ export const appConfig = {
       'moonshotai/kimi-k2-instruct-0905': {
         provider: 'groq',
         model: 'moonshotai/kimi-k2-instruct-0905'
+      },
+      'claude-code-sdk/sonnet': {
+        provider: 'claude-code-sdk',
+        model: 'sonnet'
       }
     },
     
