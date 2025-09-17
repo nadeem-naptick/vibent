@@ -28,6 +28,7 @@ export async function POST() {
         console.error('Failed to terminate legacy global sandbox:', e);
       }
       global.activeSandboxProvider = null;
+      global.activeSandbox = null;
     }
     
     // Clear existing files tracking
@@ -49,6 +50,7 @@ export async function POST() {
     
     // Also store in legacy global state for backward compatibility
     global.activeSandboxProvider = provider;
+    global.activeSandbox = provider; // Also set this for backward compatibility
     global.sandboxData = {
       sandboxId: sandboxInfo.sandboxId,
       url: sandboxInfo.url
