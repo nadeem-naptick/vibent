@@ -25,8 +25,8 @@ import {
 } from '@/lib/icons';
 import { motion } from 'framer-motion';
 import CodeApplicationProgress, { type CodeApplicationState } from '@/components/CodeApplicationProgress';
-import ClaudeCodeAgentStatus from '@/components/ClaudeCodeAgentStatus';
 import { useClaudeCodeAgent } from '@/hooks/useClaudeCodeAgent';
+import ClaudeCodeAgentStatus from '@/components/ClaudeCodeAgentStatus';
 
 interface SandboxData {
   sandboxId: string;
@@ -68,6 +68,16 @@ function AISandboxPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [aiModel, setAiModel] = useState(() => {
+    // Check sessionStorage first (from enhanced modal)
+    if (typeof window !== 'undefined') {
+      const storedModel = sessionStorage.getItem('selectedModel');
+      if (storedModel && appConfig.ai.availableModels.includes(storedModel)) {
+        // Clear it after using it
+        sessionStorage.removeItem('selectedModel');
+        return storedModel;
+      }
+    }
+    // Then check URL params
     const modelParam = searchParams.get('model');
     return appConfig.ai.availableModels.includes(modelParam || '') ? modelParam! : appConfig.ai.defaultModel;
   });
@@ -80,7 +90,7 @@ function AISandboxPage() {
   const [homeScreenFading, setHomeScreenFading] = useState(false);
   const [homeUrlInput, setHomeUrlInput] = useState('');
   const [homeContextInput, setHomeContextInput] = useState('');
-  const [activeTab, setActiveTab] = useState<'generation' | 'preview'>('preview');
+  const [activeTab, setActiveTab] = useState<'generation' | 'agent' | 'preview'>('preview');
   const [showStyleSelector, setShowStyleSelector] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
   const [showLoadingBackground, setShowLoadingBackground] = useState(false);
@@ -150,6 +160,7 @@ function AISandboxPage() {
 
   // Store flag to trigger generation after component mounts
   const [shouldAutoGenerate, setShouldAutoGenerate] = useState(false);
+  const [autoPrompt, setAutoPrompt] = useState<string>('');
 
   // Generation interruption recovery state
   const [interruptionData, setInterruptionData] = useState<{
@@ -173,12 +184,14 @@ function AISandboxPage() {
       const urlParam = searchParams.get('url');
       const templateParam = searchParams.get('template');
       const detailsParam = searchParams.get('details');
+      const modelParam = searchParams.get('model');
       
       // Then check session storage as fallback
       const storedUrl = urlParam || sessionStorage.getItem('targetUrl');
       const storedStyle = templateParam || sessionStorage.getItem('selectedStyle');
-      const storedModel = sessionStorage.getItem('selectedModel');
       const storedInstructions = sessionStorage.getItem('additionalInstructions');
+      const directPrompt = sessionStorage.getItem('directPrompt');
+      const enhancedPrompt = sessionStorage.getItem('enhancedPrompt');
       
       if (storedUrl) {
         // Mark that we have an initial submission since we're loading with a URL
@@ -187,8 +200,9 @@ function AISandboxPage() {
         // Clear sessionStorage after reading  
         sessionStorage.removeItem('targetUrl');
         sessionStorage.removeItem('selectedStyle');
-        sessionStorage.removeItem('selectedModel');
         sessionStorage.removeItem('additionalInstructions');
+        sessionStorage.removeItem('directPrompt');
+        sessionStorage.removeItem('enhancedPrompt');
         // Note: Don't clear siteMarkdown here, it will be cleared when used
         
         // Set the values in the component state
@@ -230,9 +244,7 @@ function AISandboxPage() {
           setHomeContextInput(storedInstructions);
         }
         
-        if (storedModel) {
-          setAiModel(storedModel);
-        }
+        // Model is now handled in initial state
         
         // Skip the home screen and go directly to builder
         setShowHomeScreen(false);
@@ -242,6 +254,24 @@ function AISandboxPage() {
         setShouldAutoGenerate(true);
         
         // Also set autoStart flag for the effect
+        sessionStorage.setItem('autoStart', 'true');
+      } else if (directPrompt) {
+        // Handle direct prompt generation (no URL, just prompt)
+        setHasInitialSubmission(true);
+        
+        // Clear sessionStorage after reading
+        sessionStorage.removeItem('directPrompt');
+        sessionStorage.removeItem('enhancedPrompt');
+        sessionStorage.removeItem('additionalInstructions');
+        
+        // Set the prompt in chat input and skip home screen
+        setAiChatInput(directPrompt);
+        setAutoPrompt(directPrompt);
+        setShowHomeScreen(false);
+        setHomeScreenFading(false);
+        
+        // Set flag to auto-trigger generation
+        setShouldAutoGenerate(true);
         sessionStorage.setItem('autoStart', 'true');
       }
       
@@ -361,20 +391,26 @@ function AISandboxPage() {
 
   // Auto-trigger generation when flag is set (from home page navigation)
   useEffect(() => {
-    if (shouldAutoGenerate && homeUrlInput && !showHomeScreen) {
+    if (shouldAutoGenerate && (homeUrlInput || autoPrompt) && !showHomeScreen) {
       // Reset the flag
       setShouldAutoGenerate(false);
       
       // Trigger generation after a short delay to ensure everything is set up
       const timer = setTimeout(() => {
-        console.log('[generation] Auto-triggering generation from URL params');
-        startGeneration();
+        if (homeUrlInput) {
+          console.log('[generation] Auto-triggering generation for URL:', homeUrlInput);
+          startGeneration();
+        } else if (autoPrompt) {
+          // Send the auto prompt directly
+          sendAutoPrompt(autoPrompt);
+          setAutoPrompt(''); // Clear after using
+        }
       }, 1000);
       
       return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldAutoGenerate, homeUrlInput, showHomeScreen]);
+  }, [shouldAutoGenerate, homeUrlInput, autoPrompt, showHomeScreen]);
 
   const updateStatus = (text: string, active: boolean) => {
     setStatus({ text, active });
@@ -1768,6 +1804,46 @@ Tip: I automatically detect and install npm packages from your code imports (lik
           )}
         </div>
       );
+    } else if (activeTab === 'agent') {
+      return (
+        /* Agent Tab Content - Claude Code SDK Thinking/Planning */
+        <div className="absolute inset-0 bg-white overflow-hidden">
+          <div className="h-full flex flex-col">
+            {/* Header */}
+            <div className="flex-shrink-0 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Claude Code SDK Agent</h3>
+                  <p className="text-sm text-gray-600">Real-time thinking and planning</p>
+                </div>
+                <div className="ml-auto">
+                  {agentState.isThinking && (
+                    <div className="flex items-center gap-2 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      Thinking...
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Agent Activity Content */}
+            <div className="flex-1 overflow-y-auto">
+              <ClaudeCodeAgentStatus
+                isActive={agentState.isActive}
+                activities={agentState.activities}
+                currentThought={agentState.currentThought}
+                toolsUsed={agentState.toolsUsed}
+              />
+            </div>
+          </div>
+        </div>
+      );
     }
     return null;
   };
@@ -1918,6 +1994,19 @@ Please complete any remaining components or files that are needed for a fully fu
 
   const handleCancelRecovery = () => {
     setInterruptionData(null);
+  };
+
+  const sendAutoPrompt = async (message: string) => {
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage) return;
+    
+    // Set the input and wait a moment for state to update
+    setAiChatInput(trimmedMessage);
+    
+    // Use setTimeout to ensure state is updated before calling sendChatMessage
+    setTimeout(() => {
+      sendChatMessage();
+    }, 100);
   };
 
   const sendChatMessage = async () => {
@@ -3563,13 +3652,6 @@ Focus on the key sections and content, making it clean and modern.`;
               setSidebarScrolled(scrollTop > 50);
             }}>
             
-            {/* Claude Code SDK Agent Status */}
-            <ClaudeCodeAgentStatus
-              isActive={agentState.isActive}
-              activities={agentState.activities}
-              currentThought={agentState.currentThought}
-              toolsUsed={agentState.toolsUsed}
-            />
             
             {chatMessages.map((msg, idx) => {
               // Check if this message is from a successful generation
@@ -3783,7 +3865,7 @@ Focus on the key sections and content, making it clean and modern.`;
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="px-3 pt-4 pb-4 bg-white border-b border-gray-200 flex justify-between items-center">
             <div className="flex items-center gap-2">
-              {/* Toggle-style Code/View switcher */}
+              {/* Toggle-style Code/Agent/View switcher */}
               <div className="inline-flex bg-gray-100 border border-gray-200 rounded-md p-0.5">
                 <button
                   onClick={() => setActiveTab('generation')}
@@ -3798,6 +3880,21 @@ Focus on the key sections and content, making it clean and modern.`;
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                     </svg>
                     <span>Code</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setActiveTab('agent')}
+                  className={`px-3 py-1 rounded transition-all text-xs font-medium ${
+                    activeTab === 'agent' 
+                      ? 'bg-white text-gray-900 shadow-sm' 
+                      : 'bg-transparent text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    <span>Agent</span>
                   </div>
                 </button>
                 <button

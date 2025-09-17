@@ -8,6 +8,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 });
     }
 
+    if (!process.env.FIRECRAWL_API_KEY) {
+      console.error('FIRECRAWL_API_KEY environment variable is not set');
+      return NextResponse.json({ error: 'Search service not configured' }, { status: 500 });
+    }
+
     // Use Firecrawl search to get top 20 results with screenshots
     const searchResponse = await fetch('https://api.firecrawl.dev/v1/search', {
       method: 'POST',
@@ -26,7 +31,9 @@ export async function POST(req: NextRequest) {
     });
 
     if (!searchResponse.ok) {
-      throw new Error('Search failed');
+      const errorText = await searchResponse.text();
+      console.error('Firecrawl API error:', searchResponse.status, errorText);
+      throw new Error(`Search failed: ${searchResponse.status} - ${errorText}`);
     }
 
     const searchData = await searchResponse.json();

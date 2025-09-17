@@ -150,7 +150,7 @@ const ClaudeCodeAgentStatus: React.FC<ClaudeCodeAgentStatusProps> = ({
       {/* Activities Timeline */}
       {activities.length > 0 && (
         <div className="p-4">
-          <div className="space-y-3 max-h-64 overflow-y-auto">
+          <div className="space-y-3 overflow-y-auto">
             <AnimatePresence>
               {activities.slice(-10).reverse().map((activity, index) => (
                 <motion.div

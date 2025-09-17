@@ -198,7 +198,7 @@ export default function HomePage() {
   // Handle enhanced prompt modal start building
   const handleEnhancedStartBuilding = (enhancedPrompt: string, projectType: 'static' | 'application', crawledContent?: SearchResult, instructions?: string) => {
     // Determine model based on project type
-    const modelToUse = projectType === 'static' ? 'openai/gpt-5' : 'claude-code-sdk';
+    const modelToUse = projectType === 'static' ? 'openai/gpt-5' : 'claude-code-sdk/sonnet';
     
     if (crawledContent) {
       // Using crawled content - similar to template selection flow
