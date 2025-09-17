@@ -211,6 +211,10 @@
       var(--direction, forwards);
   }
 
+  .hover\:pause-marquee:hover {
+    animation-play-state: paused;
+  }
+
   @keyframes marquee {
     to {
       transform: translateX(-50%);

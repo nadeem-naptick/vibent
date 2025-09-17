@@ -30,6 +30,8 @@ export default function ProjectGallery({ isOpen, onClose }: ProjectGalleryProps)
   const [filter, setFilter] = useState<'all' | 'ready' | 'building' | 'failed'>('ready');
   const [isUpdatingThumbnails, setIsUpdatingThumbnails] = useState(false);
   const [thumbnailUpdateStatus, setThumbnailUpdateStatus] = useState<string | null>(null);
+  const [isUpdatingNames, setIsUpdatingNames] = useState(false);
+  const [nameUpdateStatus, setNameUpdateStatus] = useState<string | null>(null);
 
   // Fetch projects
   const fetchProjects = async () => {
@@ -131,6 +133,43 @@ export default function ProjectGallery({ isOpen, onClose }: ProjectGalleryProps)
     }
   };
 
+  // Update names for all existing projects
+  const updateAllNames = async () => {
+    setIsUpdatingNames(true);
+    setNameUpdateStatus('Starting project name updates...');
+    
+    try {
+      const response = await fetch('/api/projects/update-names', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ updateAll: true }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setNameUpdateStatus(data.message);
+        // Refresh projects list to show updated names
+        setTimeout(() => {
+          fetchProjects();
+        }, 2000);
+      } else {
+        const error = await response.json();
+        setNameUpdateStatus(`Error: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to update names:', error);
+      setNameUpdateStatus('Failed to update project names');
+    } finally {
+      setIsUpdatingNames(false);
+      // Clear status after 5 seconds
+      setTimeout(() => {
+        setNameUpdateStatus(null);
+      }, 5000);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -189,6 +228,18 @@ export default function ProjectGallery({ isOpen, onClose }: ProjectGalleryProps)
               </select>
               
               <button
+                onClick={updateAllNames}
+                disabled={isUpdatingNames}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isUpdatingNames
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-blue-500 hover:bg-blue-600 text-white'
+                }`}
+              >
+                {isUpdatingNames ? 'Updating...' : 'Fix Names'}
+              </button>
+              
+              <button
                 onClick={updateAllThumbnails}
                 disabled={isUpdatingThumbnails}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -200,6 +251,13 @@ export default function ProjectGallery({ isOpen, onClose }: ProjectGalleryProps)
                 {isUpdatingThumbnails ? 'Updating...' : 'Update Thumbnails'}
               </button>
             </div>
+            
+            {/* Name update status */}
+            {nameUpdateStatus && (
+              <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-800">{nameUpdateStatus}</p>
+              </div>
+            )}
             
             {/* Thumbnail update status */}
             {thumbnailUpdateStatus && (

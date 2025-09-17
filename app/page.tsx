@@ -29,6 +29,7 @@ import GithubIcon from "@/components/shared/header/Github/_svg/GithubIcon";
 import ButtonUI from "@/components/ui/shadcn/button";
 import ProjectGallery from "@/components/ProjectGallery";
 import RecentProjectsGrid from "../components/RecentProjectsGrid";
+import EnhancedPromptModal from "@/components/EnhancedPromptModal";
 
 interface SearchResult {
   url: string;
@@ -55,6 +56,8 @@ export default function HomePage() {
   const [hasMoreResults, setHasMoreResults] = useState<boolean>(false);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [currentSearchQuery, setCurrentSearchQuery] = useState<string>('');
+  const [showEnhancedModal, setShowEnhancedModal] = useState<boolean>(false);
+  const [modalPrompt, setModalPrompt] = useState<string>('');
   const router = useRouter();
   
   // Simple URL validation
@@ -122,58 +125,9 @@ export default function HomePage() {
       sessionStorage.setItem('autoStart', 'true');
       router.push('/generation');
     } else {
-      // It's a search term, fade out if results exist, then search
-      if (hasSearched && searchResults.length > 0) {
-        setIsFadingOut(true);
-        
-        setTimeout(async () => {
-          setSearchResults([]);
-          setHasMoreResults(false);
-          setCurrentSearchQuery('');
-          setIsFadingOut(false);
-          setShowSelectMessage(true);
-          
-          // Perform new search
-          await performSearch(inputValue);
-          setHasSearched(true);
-          setShowSearchTiles(true);
-          setShowSelectMessage(false);
-          
-          // Smooth scroll to carousel
-          setTimeout(() => {
-            const carouselSection = document.querySelector('.carousel-section');
-            if (carouselSection) {
-              carouselSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-          }, 300);
-        }, 500);
-      } else {
-        // First search, no fade needed
-        setShowSelectMessage(true);
-        setIsSearching(true);
-        setHasSearched(true);
-        setShowSearchTiles(true);
-        
-        // Scroll to carousel area immediately
-        setTimeout(() => {
-          const carouselSection = document.querySelector('.carousel-section');
-          if (carouselSection) {
-            carouselSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }, 100);
-        
-        await performSearch(inputValue);
-        setShowSelectMessage(false);
-        setIsSearching(false);
-        
-        // Smooth scroll to carousel
-        setTimeout(() => {
-          const carouselSection = document.querySelector('.carousel-section');
-          if (carouselSection) {
-            carouselSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }, 300);
-      }
+      // It's a keyword/description - show enhanced prompt modal
+      setModalPrompt(inputValue);
+      setShowEnhancedModal(true);
     }
   };
 
@@ -241,6 +195,39 @@ export default function HomePage() {
     }
   };
 
+  // Handle enhanced prompt modal start building
+  const handleEnhancedStartBuilding = (enhancedPrompt: string, projectType: 'static' | 'application', crawledContent?: SearchResult, instructions?: string) => {
+    // Determine model based on project type
+    const modelToUse = projectType === 'static' ? 'openai/gpt-5' : 'claude-code-sdk';
+    
+    if (crawledContent) {
+      // Using crawled content - similar to template selection flow
+      sessionStorage.setItem('targetUrl', crawledContent.url);
+      sessionStorage.setItem('selectedStyle', selectedStyle);
+      sessionStorage.setItem('selectedModel', modelToUse);
+      sessionStorage.setItem('autoStart', 'true');
+      if (crawledContent.markdown) {
+        sessionStorage.setItem('siteMarkdown', crawledContent.markdown);
+      }
+      if (instructions) {
+        sessionStorage.setItem('additionalInstructions', instructions);
+      }
+      // Store the enhanced prompt as well
+      sessionStorage.setItem('enhancedPrompt', enhancedPrompt);
+      sessionStorage.setItem('projectType', projectType);
+    } else {
+      // Direct generation from enhanced prompt
+      sessionStorage.setItem('directPrompt', enhancedPrompt);
+      sessionStorage.setItem('selectedModel', modelToUse);
+      sessionStorage.setItem('projectType', projectType);
+      sessionStorage.setItem('autoStart', 'true');
+    }
+    
+    // Close modal and navigate
+    setShowEnhancedModal(false);
+    router.push('/generation');
+  };
+
   return (
     <HeaderProvider>
       <div className="min-h-screen bg-background-base">
@@ -293,13 +280,13 @@ export default function HomePage() {
               <HomeHeroBadge />
               <div className="text-center mb-6">
                 <h1 className="text-4xl lg:text-6xl font-bold text-gray-900 mb-12">
-                  Ship Faster. <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">Test More.</span>
+                  Build Fast. <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">Iterate Faster.</span>
                 </h1>
                 <p className="text-xl lg:text-2xl text-gray-600 mb-10">
-                  Go from concept to live website in <span className="font-bold text-orange-600">minutes</span>, not months
+                  Go from concept to live application in <span className="font-bold text-orange-600">minutes</span>, not months
                 </p>
                 <p className="text-lg text-gray-500">
-                  ⚡ Zero Dev Dependencies • 🚀 Instant MVPs • 📊 Data-Driven Iterations
+                  ✨ No Coding Knowledge • ⚡ No DevOps Setup • 🎯 Type & Build
                 </p>
               </div>
             </div>
@@ -919,6 +906,14 @@ export default function HomePage() {
       <ProjectGallery
         isOpen={showProjectGallery}
         onClose={() => setShowProjectGallery(false)}
+      />
+
+      {/* Enhanced Prompt Modal */}
+      <EnhancedPromptModal
+        isOpen={showEnhancedModal}
+        onClose={() => setShowEnhancedModal(false)}
+        originalPrompt={modalPrompt}
+        onStartBuilding={handleEnhancedStartBuilding}
       />
     </HeaderProvider>
   );

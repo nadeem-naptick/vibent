@@ -11,7 +11,9 @@ export {
   FiExternalLink,
   FiEye,
   FiSearch,
-  FiX
+  FiX,
+  FiEdit3,
+  FiGlobe
 } from 'react-icons/fi';
 
 export { 
