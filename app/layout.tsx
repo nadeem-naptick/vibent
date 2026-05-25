@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Roboto_Mono } from "next/font/google";
 import localFont from "next/font/local";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const inter = Inter({ 
@@ -46,6 +47,18 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.variable} ${geistSans.variable} ${geistMono.variable} ${robotoMono.variable} font-sans`}>
         {children}
+        <Toaster
+          theme="dark"
+          position="bottom-right"
+          richColors
+          toastOptions={{
+            style: {
+              background: 'rgba(11, 15, 20, 0.95)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              backdropFilter: 'blur(20px)',
+            },
+          }}
+        />
       </body>
     </html>
   );

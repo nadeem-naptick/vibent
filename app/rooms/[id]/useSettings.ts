@@ -8,17 +8,23 @@ const MIN_THRESHOLD = 3;
 const MAX_THRESHOLD = 20;
 const DEFAULT_COUNTDOWN_MS = 5000;
 
+export type DeviceFrame = 'mobile' | 'tablet' | 'desktop';
+
 export type RoomSettings = {
   // How many detections to accumulate before auto-composing into a decision.
   autoComposeThreshold: number;
   // How long a single detection stays in the "soft confirm" countdown before
   // joining the pool. Not user-editable yet, but here so we can expose later.
   countdownMs: number;
+  // How wide the preview iframe is rendered. desktop = full canvas, tablet =
+  // 768px, mobile = 390px (matches modern iPhone widths).
+  deviceFrame: DeviceFrame;
 };
 
 const DEFAULT_SETTINGS: RoomSettings = {
   autoComposeThreshold: DEFAULT_THRESHOLD,
   countdownMs: DEFAULT_COUNTDOWN_MS,
+  deviceFrame: 'desktop',
 };
 
 function read(): RoomSettings {
@@ -34,6 +40,12 @@ function read(): RoomSettings {
         MAX_THRESHOLD,
       ),
       countdownMs: parsed.countdownMs ?? DEFAULT_COUNTDOWN_MS,
+      deviceFrame:
+        parsed.deviceFrame === 'mobile' ||
+        parsed.deviceFrame === 'tablet' ||
+        parsed.deviceFrame === 'desktop'
+          ? parsed.deviceFrame
+          : 'desktop',
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -61,6 +73,7 @@ export function useSettings() {
           MAX_THRESHOLD,
         ),
         countdownMs: patch.countdownMs ?? prev.countdownMs,
+        deviceFrame: patch.deviceFrame ?? prev.deviceFrame,
       };
       if (typeof window !== 'undefined') {
         try {

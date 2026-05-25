@@ -106,15 +106,11 @@ export function useAutoCompose({
     });
   }, [now, pending]);
 
-  // When the pool hits the threshold, fire compose.
-  useEffect(() => {
-    if (!isHost) return;
-    if (pool.length < autoComposeThreshold) return;
-    if (composing) return;
-
-    setComposing(true);
-    const intentIds = pool.map((i) => i.id);
-    (async () => {
+  // Run the compose pipeline for a specific set of intent IDs. Extracted so
+  // both the threshold-trigger and the manual "Apply now" button can call it.
+  const runCompose = useCallback(
+    async (intentIds: string[]) => {
+      if (intentIds.length === 0) return;
       try {
         // Ask the AI for a merged instruction first.
         const composeRes = await fetch('/api/intel/compose-decision', {
@@ -140,17 +136,57 @@ export function useAutoCompose({
         }
       } catch (err) {
         console.error('[auto-compose] failed:', err);
-        // Leave pool intact so user can manually retry / inspect.
-        setComposing(false);
-        return;
+        throw err;
       }
-      // Clear pool — server marks intents 'applied' so they'll drop out of
-      // the next /api/rooms/[id]/feed poll automatically too.
-      setPool([]);
-      setComposing(false);
-      onPoolComposed();
-    })();
-  }, [pool, autoComposeThreshold, composing, roomId, isHost, onPoolComposed]);
+    },
+    [roomId],
+  );
+
+  // When the pool hits the threshold, fire compose automatically.
+  useEffect(() => {
+    if (!isHost) return;
+    if (pool.length < autoComposeThreshold) return;
+    if (composing) return;
+
+    setComposing(true);
+    const intentIds = pool.map((i) => i.id);
+    runCompose(intentIds)
+      .then(() => {
+        setPool([]);
+        onPoolComposed();
+      })
+      .catch(() => {
+        // Leave pool intact so user can manually retry / inspect.
+      })
+      .finally(() => {
+        setComposing(false);
+      });
+  }, [pool, autoComposeThreshold, composing, isHost, runCompose, onPoolComposed]);
+
+  // Manual "Apply now" — sweeps both pool AND any pending items (those still
+  // in their countdown) into a single compose. Used by the DecisionStack
+  // header button so the host can ship a decision without waiting for the
+  // threshold.
+  const composeNow = useCallback(() => {
+    if (composing) return;
+    const allIntents = [
+      ...pool,
+      ...pending.map((p) => p.intent),
+    ];
+    if (allIntents.length === 0) return;
+    setComposing(true);
+    setPending([]);
+    setPool([]);
+    const intentIds = allIntents.map((i) => i.id);
+    runCompose(intentIds)
+      .then(() => onPoolComposed())
+      .catch(() => {
+        // Failed — put items back so user can retry. Skipping for now — the
+        // backend will have left them as pending_approval anyway, so the
+        // next feed poll will surface them again.
+      })
+      .finally(() => setComposing(false));
+  }, [composing, pool, pending, runCompose, onPoolComposed]);
 
   const removePending = useCallback(
     (intentId: string) => {
@@ -193,5 +229,6 @@ export function useAutoCompose({
     threshold: autoComposeThreshold,
     removePending,
     removeFromPool,
+    composeNow,
   };
 }

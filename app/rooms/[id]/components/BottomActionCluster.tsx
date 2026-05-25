@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Settings2, Maximize2, Download, LogOut } from 'lucide-react';
-import { useSettings } from '../useSettings';
+import { Settings2, Maximize2, Download, LogOut, Smartphone, Tablet, Monitor } from 'lucide-react';
+import { useSettings, type DeviceFrame } from '../useSettings';
 
 type Props = {
   roomId: string;
@@ -42,15 +42,21 @@ export function BottomActionCluster({ roomId, onExitRoom }: Props) {
   }
 
   return (
-    <div className="absolute bottom-5 right-5 z-30 flex items-center gap-2">
+    <div className="absolute bottom-6 right-6 z-30 flex items-center gap-3">
+      <DeviceFrameToggle
+        value={settings.deviceFrame}
+        onChange={(f) => update({ deviceFrame: f })}
+      />
+
       {/* Settings popover */}
       <div className="relative" ref={popoverRef}>
         <button
           onClick={() => setSettingsOpen((v) => !v)}
           title="Room settings"
-          className="grid h-12 w-12 place-items-center rounded-2xl border border-white/10 bg-slate-950/42 text-white/65 shadow-2xl backdrop-blur-2xl hover:text-white"
+          style={{ width: '56px', height: '56px' }}
+          className="grid place-items-center rounded-2xl border-2 border-white/20 bg-slate-950/70 text-white/75 shadow-2xl backdrop-blur-2xl hover:text-white"
         >
-          <Settings2 size={18} />
+          <Settings2 size={22} />
         </button>
         {settingsOpen && (
           <div className="absolute bottom-full right-0 mb-2 w-72 rounded-2xl border border-white/10 bg-[#0B0F14]/95 shadow-2xl backdrop-blur-2xl p-4">
@@ -81,26 +87,61 @@ export function BottomActionCluster({ roomId, onExitRoom }: Props) {
       <button
         onClick={toggleFullscreen}
         title="Fullscreen"
-        className="grid h-12 w-12 place-items-center rounded-2xl border border-white/10 bg-slate-950/42 text-white/65 shadow-2xl backdrop-blur-2xl hover:text-white"
+        style={{ width: '56px', height: '56px' }}
+        className="grid place-items-center rounded-2xl border-2 border-white/20 bg-slate-950/70 text-white/75 shadow-2xl backdrop-blur-2xl hover:text-white"
       >
-        <Maximize2 size={18} />
+        <Maximize2 size={22} />
       </button>
 
       <button
         onClick={downloadExport}
         title="Export"
-        className="flex h-12 items-center gap-2 rounded-2xl bg-white px-5 text-sm font-semibold text-black shadow-2xl hover:bg-blue-100"
+        style={{ height: '56px' }}
+        className="flex items-center gap-2 rounded-2xl bg-white px-6 text-base font-semibold text-black shadow-2xl hover:bg-blue-100"
       >
-        <Download size={17} /> Export
+        <Download size={20} /> Export
       </button>
 
       <button
         onClick={onExitRoom}
         title="Leave room"
-        className="grid h-12 w-12 place-items-center rounded-2xl border border-white/10 bg-slate-950/42 text-white/65 shadow-2xl backdrop-blur-2xl hover:text-red-300 hover:border-red-400/30"
+        style={{ width: '56px', height: '56px' }}
+        className="grid place-items-center rounded-2xl border-2 border-white/20 bg-slate-950/70 text-white/75 shadow-2xl backdrop-blur-2xl hover:text-red-300 hover:border-red-400/40"
       >
-        <LogOut size={18} />
+        <LogOut size={22} />
       </button>
+    </div>
+  );
+}
+
+function DeviceFrameToggle({
+  value,
+  onChange,
+}: {
+  value: DeviceFrame;
+  onChange: (v: DeviceFrame) => void;
+}) {
+  const frames: { id: DeviceFrame; icon: typeof Monitor; label: string }[] = [
+    { id: 'desktop', icon: Monitor, label: 'Desktop' },
+    { id: 'tablet', icon: Tablet, label: 'Tablet' },
+    { id: 'mobile', icon: Smartphone, label: 'Mobile' },
+  ];
+  return (
+    <div className="flex items-center gap-1 rounded-2xl border-2 border-white/20 bg-slate-950/70 p-1 shadow-2xl backdrop-blur-2xl">
+      {frames.map(({ id, icon: Icon, label }) => (
+        <button
+          key={id}
+          onClick={() => onChange(id)}
+          title={label}
+          className={`grid h-11 w-11 place-items-center rounded-xl transition-colors ${
+            value === id
+              ? 'bg-blue-500/30 text-blue-100'
+              : 'text-white/60 hover:bg-white/5 hover:text-white'
+          }`}
+        >
+          <Icon size={18} />
+        </button>
+      ))}
     </div>
   );
 }

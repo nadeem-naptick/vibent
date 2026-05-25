@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Zap, X, Check } from 'lucide-react';
+import { Zap, Check } from 'lucide-react';
 import type { LiveTask } from '../types';
 
 type Props = {
@@ -11,6 +11,22 @@ type Props = {
 
 export function BuildingStack({ tasks }: Props) {
   const [expanded, setExpanded] = useState(false);
+
+  // Auto-fan the stack the moment a task starts running, so the user sees
+  // progress without having to click. Auto-collapse again when nothing is
+  // active.
+  const prevRunningRef = useRef(false);
+  useEffect(() => {
+    const hasRunning = tasks.some((t) => t.status === 'running');
+    if (hasRunning && !prevRunningRef.current) {
+      setExpanded(true);
+    } else if (!hasRunning && prevRunningRef.current) {
+      // small delay before collapsing so the success state is visible
+      const t = setTimeout(() => setExpanded(false), 2500);
+      return () => clearTimeout(t);
+    }
+    prevRunningRef.current = hasRunning;
+  }, [tasks]);
 
   // Show only active (queued + running) plus most-recent completed at the
   // top. Older completed tasks live in the Active Tasks drawer.
@@ -25,10 +41,15 @@ export function BuildingStack({ tasks }: Props) {
   if (visible.length === 0) return null;
 
   return (
-    <div className="absolute right-24 bottom-5 z-30 w-[310px] pointer-events-none">
+    <div className="absolute right-24 top-24 z-30 w-[320px] pointer-events-none">
       <div
         className="relative pointer-events-auto"
-        style={{ height: expanded ? visible.length * 110 : 92 }}
+        style={{
+          height: expanded
+            ? Math.min(visible.length * 110, Math.round((typeof window !== 'undefined' ? window.innerHeight : 800) * 0.5))
+            : 110,
+          overflowY: expanded && visible.length > 4 ? 'auto' : 'visible',
+        }}
       >
         {visible.map((task, index) => (
           <TaskCard
@@ -84,14 +105,14 @@ function TaskCard({
   return (
     <motion.div
       animate={{
-        y: expanded ? -index * 110 : -index * 10,
+        y: expanded ? index * 110 : index * 10,
         scale: expanded ? 1 : 1 - index * 0.035,
         opacity: expanded ? 1 : 1 - index * 0.12,
         zIndex: stackSize - index,
       }}
       transition={{ type: 'spring', stiffness: 260, damping: 28 }}
       onClick={onToggle}
-      className={`absolute bottom-0 left-0 right-0 cursor-pointer rounded-[24px] border ${borderColor} bg-[#0B0F14]/88 p-4 shadow-2xl backdrop-blur-2xl`}
+      className={`absolute top-0 left-0 right-0 cursor-pointer rounded-[24px] border ${borderColor} bg-[#0B0F14]/95 p-4 shadow-2xl backdrop-blur-2xl`}
       style={{ zIndex: stackSize - index }}
     >
       <div className="mb-2 flex items-center justify-between">

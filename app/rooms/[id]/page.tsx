@@ -15,7 +15,6 @@ import { tasks } from '@/lib/db/schema';
 import { desc } from 'drizzle-orm';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
 import { getLatestVersion, listVersions } from '@/lib/snapshots/manager';
-import { restoreRoomSandbox } from '@/lib/sandbox/room-sandbox';
 import { LiveRoomClient } from './LiveRoomClient';
 import type { RoomFeed } from './types';
 
@@ -58,25 +57,28 @@ export default async function RoomPage({
     participant = created;
   }
 
-  // Auto-restore the sandbox if it's no longer alive (server restart or
-  // sandbox provider timeout). Uses the latest version snapshot.
+  // Detect a dead sandbox WITHOUT blocking the page render. If the sandbox
+  // is gone (server restart or expired) we flip the room status to
+  // 'provisioning' synchronously and let the LiveRoomClient kick off the
+  // actual restore via POST /api/rooms/[id]/restore on mount. The iframe
+  // area shows "Provisioning workspace…" until the polling sees the room
+  // flip back to 'active' with a fresh sandboxUrl.
   let liveRoom = room;
   if (room.status === 'active' && room.sandboxId) {
     const alive = sandboxManager.getProvider(room.sandboxId)?.isAlive();
     if (!alive) {
       const latest = await getLatestVersion(room.id);
       if (latest) {
-        try {
-          const fresh = await restoreRoomSandbox(room.id, latest);
-          const [updated] = await db
-            .update(rooms)
-            .set({ sandboxId: fresh.sandboxId, sandboxUrl: fresh.url, updatedAt: new Date() })
-            .where(eq(rooms.id, room.id))
-            .returning();
-          liveRoom = updated;
-        } catch (err) {
-          console.error('[room] auto-restore failed:', err);
-        }
+        const [updated] = await db
+          .update(rooms)
+          .set({
+            status: 'provisioning',
+            sandboxUrl: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(rooms.id, room.id))
+          .returning();
+        liveRoom = updated;
       }
     }
   }

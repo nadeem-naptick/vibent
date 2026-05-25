@@ -15,14 +15,14 @@ export function FloatingButton({ icon: Icon, label, active, onClick, title }: Pr
     <button
       onClick={onClick}
       title={title ?? label}
-      className={`group flex items-center gap-2 rounded-full border px-4 py-3 text-sm shadow-2xl backdrop-blur-2xl transition ${
+      className={`group flex items-center gap-2.5 rounded-full border-2 px-5 py-3.5 text-sm font-medium shadow-2xl backdrop-blur-2xl transition ${
         active
-          ? 'border-blue-400/40 bg-blue-500/18 text-blue-50'
-          : 'border-white/10 bg-slate-950/40 text-white/70 hover:bg-white/10 hover:text-white'
+          ? 'border-blue-400/50 bg-blue-500/25 text-blue-50'
+          : 'border-white/20 bg-slate-950/70 text-white/80 hover:bg-white/10 hover:text-white'
       }`}
     >
-      <Icon size={17} />
-      <span className="hidden xl:inline">{label}</span>
+      <Icon size={20} />
+      <span className="hidden lg:inline">{label}</span>
     </button>
   );
 }

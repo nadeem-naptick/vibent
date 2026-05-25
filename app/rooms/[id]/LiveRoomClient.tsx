@@ -12,6 +12,8 @@ import '@livekit/components-styles';
 import { useBrowserSTT } from './useBrowserSTT';
 import { useRoomFeed } from './useRoomFeed';
 import { useAutoCompose } from './useAutoCompose';
+import { useRoomToasts } from './useRoomToasts';
+import { useSettings } from './useSettings';
 import type { RoomFeed } from './types';
 import { TopBar } from './components/TopBar';
 import { ParticipantDock } from './components/ParticipantDock';
@@ -50,6 +52,18 @@ export function LiveRoomClient({
   const router = useRouter();
   const [sandboxUrl, setSandboxUrl] = useState(initialSandboxUrl);
   const [status, setStatus] = useState(initialStatus);
+
+  // If the room arrived in provisioning state with no sandboxUrl, the
+  // sandbox is either being created for the first time OR it died and we
+  // need to trigger restore. The restore endpoint is idempotent — safe to
+  // call multiple times.
+  useEffect(() => {
+    if (status === 'provisioning' && !sandboxUrl) {
+      fetch(`/api/rooms/${roomId}/restore`, { method: 'POST' }).catch((err) => {
+        console.warn('[room] restore trigger failed:', err);
+      });
+    }
+  }, [roomId, status, sandboxUrl]);
 
   // Poll while the sandbox is still provisioning.
   useEffect(() => {
@@ -121,6 +135,11 @@ function RoomShell({
   const { feed, updateIntent, addLocalTranscript, addLocalIntent, lastCompletedTaskId } =
     useRoomFeed(initialFeed, roomId);
 
+  const { settings } = useSettings();
+
+  // Fire toast notifications on task / version state changes
+  useRoomToasts({ tasks: feed.tasks, versions: feed.versions });
+
   useBrowserSTT({
     roomId,
     speakerName,
@@ -161,7 +180,12 @@ function RoomShell({
 
   return (
     <>
-      <Canvas sandboxUrl={sandboxUrl} status={status} iframeKey={iframeKey} />
+      <Canvas
+        sandboxUrl={sandboxUrl}
+        status={status}
+        iframeKey={iframeKey}
+        deviceFrame={settings.deviceFrame}
+      />
 
       <TopBar roomTitle={room.title} roomSubtitle={subtitle} />
 
@@ -172,6 +196,7 @@ function RoomShell({
         composing={autoCompose.composing}
         onRemovePending={autoCompose.removePending}
         onRemoveFromPool={autoCompose.removeFromPool}
+        onApplyNow={autoCompose.composeNow}
         isHost={isHost}
       />
 

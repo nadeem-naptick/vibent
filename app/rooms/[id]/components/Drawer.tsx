@@ -159,6 +159,13 @@ function TasksContent({ tasks }: { tasks: LiveTask[] }) {
   );
 }
 
+type VersionDiff = {
+  path: string;
+  kind: 'added' | 'removed' | 'modified';
+  prevBytes?: number;
+  nextBytes?: number;
+};
+
 function VersionsContent({
   versions,
   roomId,
@@ -172,6 +179,8 @@ function VersionsContent({
 }) {
   const [rollingBack, setRollingBack] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [diffOpenId, setDiffOpenId] = useState<string | null>(null);
+  const [diffs, setDiffs] = useState<Record<string, VersionDiff[] | 'loading' | 'error'>>({});
 
   async function rollback(versionId: string, label: string) {
     if (!confirm(`Roll back to ${label}? Current sandbox files will be overwritten.`)) return;
@@ -193,6 +202,24 @@ function VersionsContent({
     }
   }
 
+  async function toggleDiff(versionId: string) {
+    if (diffOpenId === versionId) {
+      setDiffOpenId(null);
+      return;
+    }
+    setDiffOpenId(versionId);
+    if (diffs[versionId] && diffs[versionId] !== 'error') return;
+    setDiffs((prev) => ({ ...prev, [versionId]: 'loading' }));
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/versions/${versionId}/diff`);
+      if (!res.ok) throw new Error('diff failed');
+      const data = (await res.json()) as { diffs: VersionDiff[] };
+      setDiffs((prev) => ({ ...prev, [versionId]: data.diffs }));
+    } catch {
+      setDiffs((prev) => ({ ...prev, [versionId]: 'error' }));
+    }
+  }
+
   if (versions.length === 0) {
     return <Empty>v0 lands here once the sandbox is ready.</Empty>;
   }
@@ -206,9 +233,12 @@ function VersionsContent({
           {error}
         </div>
       )}
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-        {versions.map((v, i) => {
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        {versions.map((v) => {
           const isCurrent = v.id === current.id;
+          const isV0 = v.versionNumber === 0;
+          const diffOpen = diffOpenId === v.id;
+          const diffState = diffs[v.id];
           return (
             <div
               key={v.id}
@@ -226,17 +256,52 @@ function VersionsContent({
               <div className="mt-2 text-[10px] text-white/30">
                 {v.fileCount} files · {humanBytes(v.totalBytes)}
               </div>
-              {!isCurrent && isHost && (
-                <button
-                  onClick={() => rollback(v.id, `v${v.versionNumber}`)}
-                  disabled={rollingBack === v.id}
-                  className="mt-4 w-full rounded-2xl border border-white/10 px-3 py-2 text-sm text-white/65 hover:text-white hover:bg-white/5 disabled:opacity-50"
-                >
-                  {rollingBack === v.id ? 'Rolling back…' : 'Rollback'}
-                </button>
-              )}
-              {isCurrent && (
-                <div className="mt-4 text-center text-xs text-blue-200">Current</div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {!isV0 && (
+                  <button
+                    onClick={() => toggleDiff(v.id)}
+                    className="rounded-xl border border-white/10 px-3 py-1.5 text-xs text-white/65 hover:text-white hover:bg-white/5"
+                  >
+                    {diffOpen ? 'Hide diff' : 'View diff'}
+                  </button>
+                )}
+                {!isCurrent && isHost && (
+                  <button
+                    onClick={() => rollback(v.id, `v${v.versionNumber}`)}
+                    disabled={rollingBack === v.id}
+                    className="flex-1 rounded-xl border border-blue-400/30 bg-blue-500/15 px-3 py-1.5 text-xs text-blue-100 hover:bg-blue-500/25 disabled:opacity-50"
+                  >
+                    {rollingBack === v.id ? 'Rolling back…' : 'Rollback'}
+                  </button>
+                )}
+                {isCurrent && (
+                  <span className="flex-1 text-center text-xs text-blue-200 py-1.5">Current</span>
+                )}
+              </div>
+
+              {diffOpen && (
+                <div className="mt-3 border-t border-white/8 pt-3">
+                  {diffState === 'loading' && (
+                    <div className="text-xs text-white/45">Loading diff…</div>
+                  )}
+                  {diffState === 'error' && (
+                    <div className="text-xs text-red-300">Could not load diff.</div>
+                  )}
+                  {Array.isArray(diffState) && diffState.length === 0 && (
+                    <div className="text-xs text-white/45">No file changes.</div>
+                  )}
+                  {Array.isArray(diffState) && diffState.length > 0 && (
+                    <ul className="space-y-1 max-h-48 overflow-y-auto">
+                      {diffState.map((d) => (
+                        <li key={d.path} className="text-xs flex items-start gap-2 font-mono">
+                          <DiffKind kind={d.kind} />
+                          <span className="text-white/70 truncate flex-1">{d.path}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               )}
             </div>
           );
@@ -244,6 +309,14 @@ function VersionsContent({
       </div>
     </div>
   );
+}
+
+function DiffKind({ kind }: { kind: VersionDiff['kind'] }) {
+  if (kind === 'added')
+    return <span className="text-emerald-400 shrink-0">+ added</span>;
+  if (kind === 'removed')
+    return <span className="text-red-400 shrink-0">- removed</span>;
+  return <span className="text-amber-300 shrink-0">~ changed</span>;
 }
 
 function ContextContent({ room }: { room: Props['room'] }) {

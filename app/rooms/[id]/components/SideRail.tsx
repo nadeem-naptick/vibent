@@ -26,20 +26,21 @@ export function SideRail({ badges, onOpen }: Props) {
   ];
 
   return (
-    <div className="absolute right-5 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-3">
+    <div className="absolute right-6 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-4">
       {items.map(({ icon: Icon, label, key, badge }) => (
         <button
           key={key}
           onClick={() => onOpen(key)}
           title={label}
-          className="group relative flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-slate-950/42 text-white/60 shadow-2xl backdrop-blur-2xl transition-all hover:w-40 hover:justify-start hover:px-4 hover:text-white"
+          style={{ width: '64px', height: '64px' }}
+          className="group relative flex items-center justify-center rounded-2xl border-2 border-white/20 bg-slate-950/70 text-white/75 shadow-2xl backdrop-blur-2xl transition-all hover:!w-[200px] hover:justify-start hover:px-5 hover:text-white"
         >
-          <Icon size={19} />
-          <span className="ml-3 hidden text-sm group-hover:inline whitespace-nowrap">
+          <Icon size={24} />
+          <span className="ml-3 hidden text-sm font-medium group-hover:inline whitespace-nowrap">
             {label}
           </span>
           {badge != null && badge > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-500 px-1.5 text-[10px] font-semibold text-white">
+            <span className="absolute -top-2 -right-2 flex h-6 min-w-[24px] items-center justify-center rounded-full bg-blue-500 px-1.5 text-xs font-semibold text-white shadow-lg">
               {badge > 99 ? '99+' : badge}
             </span>
           )}
