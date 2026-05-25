@@ -31,22 +31,10 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Vibe for Enterprises - AI Website Builder",
-  description: "Transform any website into a modern, responsive design in seconds with our enterprise-grade AI-powered website builder. Perfect for businesses and agencies.",
-  keywords: "AI website builder, enterprise web design, website transformation, responsive design, business website builder",
-  authors: [{ name: "Vibe for Enterprises" }],
-  robots: "index, follow",
-  openGraph: {
-    title: "Vibe for Enterprises - AI Website Builder",
-    description: "Transform any website into a modern, responsive design in seconds with our enterprise-grade AI-powered website builder.",
-    type: "website",
-    locale: "en_US"
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Vibe for Enterprises - AI Website Builder",
-    description: "Transform any website into a modern, responsive design in seconds with our enterprise-grade AI-powered website builder."
-  }
+  title: "Agentic Collaboration Room",
+  description:
+    "A live execution workspace where teams discuss, decide, and watch the product artifact take shape in real time.",
+  robots: "noindex, nofollow",
 };
 
 export default function RootLayout({

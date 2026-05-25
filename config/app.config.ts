@@ -50,37 +50,33 @@ export const appConfig = {
   
   // AI Model Configuration
   ai: {
-    // Default AI model
-    defaultModel: 'openai/gpt-5',
+    // Default intelligence-layer model
+    defaultModel: 'anthropic/claude-haiku-4-5',
     
-    // Available models
+    // Available models (intelligence layer — modular via Vercel AI SDK)
     availableModels: [
+      'anthropic/claude-haiku-4-5',
+      'anthropic/claude-sonnet-4-6',
       'openai/gpt-5',
+      'google/gemini-2.0-flash-exp',
       'moonshotai/kimi-k2-instruct-0905',
-      'anthropic/claude-sonnet-4-20250514',
-      'claude-code-sdk/sonnet',
-      'google/gemini-2.0-flash-exp'
     ],
-    
+
     // Model display names
     modelDisplayNames: {
+      'anthropic/claude-haiku-4-5': 'Claude Haiku 4.5',
+      'anthropic/claude-sonnet-4-6': 'Claude Sonnet 4.6',
       'openai/gpt-5': 'GPT-5',
+      'google/gemini-2.0-flash-exp': 'Gemini 2.0 Flash',
       'moonshotai/kimi-k2-instruct-0905': 'Kimi K2 (Groq)',
-      'anthropic/claude-sonnet-4-20250514': 'Sonnet 4',
-      'claude-code-sdk/sonnet': 'Claude Code SDK (Agents)',
-      'google/gemini-2.0-flash-exp': 'Gemini 2.0 Flash (Experimental)'
     } as Record<string, string>,
-    
-    // Model API configuration
+
+    // Model API configuration (for non-standard provider routing)
     modelApiConfig: {
       'moonshotai/kimi-k2-instruct-0905': {
         provider: 'groq',
         model: 'moonshotai/kimi-k2-instruct-0905'
       },
-      'claude-code-sdk/sonnet': {
-        provider: 'claude-code-sdk',
-        model: 'sonnet'
-      }
     },
     
     // Temperature settings for non-reasoning models

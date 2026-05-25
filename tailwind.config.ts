@@ -2,16 +2,7 @@
 import defaultTheme from "tailwindcss/defaultTheme";
 import type { Config } from "tailwindcss";
 
-import colorsJson from "./colors.json";
-
-const colors = Object.keys(colorsJson).reduce(
-  (acc, key) => {
-    acc[key] = `var(--${key})`;
-
-    return acc;
-  },
-  {} as Record<string, string>
-);
+const colors: Record<string, string> = {};
 
 const sizes = Array.from({ length: 1000 }, (_, i) => i).reduce(
   (acc, curr) => {
