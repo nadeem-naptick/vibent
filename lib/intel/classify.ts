@@ -17,7 +17,7 @@ const DEFAULT_PROVIDER: IntelProvider =
 const DEFAULT_MODELS: Record<IntelProvider, string> = {
   anthropic: process.env.INTEL_MODEL_ANTHROPIC || 'claude-haiku-4-5',
   openai: process.env.INTEL_MODEL_OPENAI || 'gpt-5-mini',
-  google: process.env.INTEL_MODEL_GOOGLE || 'gemini-2.0-flash-exp',
+  google: process.env.INTEL_MODEL_GOOGLE || 'gemini-3.5-flash',
   groq: process.env.INTEL_MODEL_GROQ || 'moonshotai/kimi-k2-instruct-0905',
 };
 

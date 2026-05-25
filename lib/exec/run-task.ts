@@ -20,7 +20,7 @@ const DEFAULT_PROVIDER: ExecProvider =
   (process.env.EXEC_PROVIDER as ExecProvider) || 'google';
 
 const DEFAULT_MODELS: Record<ExecProvider, string> = {
-  google: process.env.EXEC_MODEL_GOOGLE || 'gemini-2.5-pro',
+  google: process.env.EXEC_MODEL_GOOGLE || 'gemini-3.5-flash',
   anthropic: process.env.EXEC_MODEL_ANTHROPIC || 'claude-sonnet-4-5',
   openai: process.env.EXEC_MODEL_OPENAI || 'gpt-5',
   groq: process.env.EXEC_MODEL_GROQ || 'moonshotai/kimi-k2-instruct-0905',
@@ -31,14 +31,32 @@ function resolveModel() {
   const modelId = DEFAULT_MODELS[provider];
   switch (provider) {
     case 'google':
-      return { model: google(modelId), label: `google/${modelId}` };
+      return { model: google(modelId), label: `google/${modelId}`, provider };
     case 'anthropic':
-      return { model: anthropic(modelId), label: `anthropic/${modelId}` };
+      return { model: anthropic(modelId), label: `anthropic/${modelId}`, provider };
     case 'openai':
-      return { model: openai(modelId), label: `openai/${modelId}` };
+      return { model: openai(modelId), label: `openai/${modelId}`, provider };
     case 'groq':
-      return { model: groq(modelId), label: `groq/${modelId}` };
+      return { model: groq(modelId), label: `groq/${modelId}`, provider };
   }
+}
+
+// Per-provider extras (e.g. enable Gemini thinking for the executing agent —
+// it's a multi-step coding task that benefits from reasoning; the classifier
+// stays no-thinking for speed).
+function execProviderOptions(provider: ExecProvider) {
+  if (provider === 'google') {
+    return {
+      google: {
+        thinkingConfig: {
+          // -1 = dynamic budget; model decides how much to think per step
+          thinkingBudget: -1,
+          includeThoughts: false,
+        },
+      },
+    } as const;
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +132,7 @@ export async function runTask(taskId: string): Promise<void> {
     return;
   }
 
-  const { model, label: modelLabel } = resolveModel();
+  const { model, label: modelLabel, provider: execProvider } = resolveModel();
   await db
     .update(tasks)
     .set({ status: 'running', startedAt: new Date(), model: modelLabel })
@@ -136,6 +154,7 @@ export async function runTask(taskId: string): Promise<void> {
     const result = await generateText({
       model,
       tools,
+      providerOptions: execProviderOptions(execProvider),
       stopWhen: ({ steps }: { steps: unknown[] }) => steps.length >= MAX_STEPS,
       messages: [
         { role: 'system', content: buildSystemPrompt(room) },
