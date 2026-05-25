@@ -2,26 +2,34 @@
 
 import { useMemo, useState } from 'react';
 import type { DetectedIntent, IntentType, TranscriptSegment } from '@/lib/db/mongo';
+import type { LiveTask } from './types';
 
-type Tab = 'transcript' | 'detected' | 'decisions' | 'applied' | 'open';
+type Tab = 'transcript' | 'detected' | 'decisions' | 'tasks' | 'open';
 
 const TAB_LABELS: Record<Tab, string> = {
   transcript: 'Transcript',
   detected: 'Detected',
   decisions: 'Decisions',
-  applied: 'Applied',
+  tasks: 'Tasks',
   open: 'Open',
 };
 
 type Props = {
   transcripts: TranscriptSegment[];
   intents: DetectedIntent[];
+  tasks: LiveTask[];
   isHost: boolean;
   onUpdateIntent: (intentId: string, patch: { status: DetectedIntent['status'] }) => void;
 };
 
-export function AIPanel({ transcripts, intents, isHost, onUpdateIntent }: Props) {
-  const [tab, setTab] = useState<Tab>('detected');
+export function AIPanel({
+  transcripts,
+  intents,
+  tasks,
+  isHost,
+  onUpdateIntent,
+}: Props) {
+  const [tab, setTab] = useState<Tab>('decisions');
 
   const grouped = useMemo(() => groupIntents(intents), [intents]);
 
@@ -30,7 +38,7 @@ export function AIPanel({ transcripts, intents, isHost, onUpdateIntent }: Props)
       <div className="border-b border-neutral-900">
         <nav className="flex">
           {(Object.keys(TAB_LABELS) as Tab[]).map((t) => {
-            const count = tabCount(t, transcripts, grouped);
+            const count = tabCount(t, transcripts, grouped, tasks);
             return (
               <button
                 key={t}
@@ -83,9 +91,7 @@ export function AIPanel({ transcripts, intents, isHost, onUpdateIntent }: Props)
             }
           />
         )}
-        {tab === 'applied' && (
-          <IntentList intents={grouped.applied} empty="Nothing applied yet." renderActions={null} />
-        )}
+        {tab === 'tasks' && <TaskList tasks={tasks} />}
         {tab === 'open' && (
           <IntentList
             intents={grouped.openQuestions}
@@ -236,7 +242,12 @@ function groupIntents(intents: DetectedIntent[]): Grouped {
   return { detected, pendingDecisions, applied, openQuestions };
 }
 
-function tabCount(tab: Tab, transcripts: TranscriptSegment[], grouped: Grouped) {
+function tabCount(
+  tab: Tab,
+  transcripts: TranscriptSegment[],
+  grouped: Grouped,
+  tasks: LiveTask[],
+) {
   switch (tab) {
     case 'transcript':
       return transcripts.length || null;
@@ -244,9 +255,108 @@ function tabCount(tab: Tab, transcripts: TranscriptSegment[], grouped: Grouped) 
       return grouped.detected.length || null;
     case 'decisions':
       return grouped.pendingDecisions.length || null;
-    case 'applied':
-      return grouped.applied.length || null;
+    case 'tasks':
+      return tasks.length || null;
     case 'open':
       return grouped.openQuestions.length || null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Tasks tab — live agent timeline
+// ---------------------------------------------------------------------------
+
+function TaskList({ tasks }: { tasks: LiveTask[] }) {
+  if (tasks.length === 0) {
+    return (
+      <Empty>
+        Approve a decision and the execution agent will start modifying the
+        artifact here.
+      </Empty>
+    );
+  }
+  return (
+    <ul className="divide-y divide-neutral-900">
+      {tasks.map((task) => (
+        <li key={task.id} className="px-4 py-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <TaskStatusBadge status={task.status} />
+            {task.model && (
+              <span className="text-[10px] text-neutral-600">{task.model}</span>
+            )}
+          </div>
+          <div className="text-sm text-neutral-200 leading-snug">{task.instruction}</div>
+          {task.events.length > 0 && (
+            <ol className="mt-2 space-y-1 border-l border-neutral-800 pl-3">
+              {task.events.map((ev, i) => (
+                <li key={i} className="text-xs text-neutral-500 leading-snug">
+                  <EventLine event={ev} />
+                </li>
+              ))}
+            </ol>
+          )}
+          {task.summary && task.status === 'complete' && (
+            <div className="text-xs text-neutral-400 italic mt-2 leading-snug">
+              {task.summary}
+            </div>
+          )}
+          {task.error && (
+            <div className="text-xs text-red-400 mt-2 leading-snug">{task.error}</div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TaskStatusBadge({ status }: { status: LiveTask['status'] }) {
+  const colors: Record<LiveTask['status'], string> = {
+    running: 'bg-blue-950 text-blue-300 border-blue-900',
+    complete: 'bg-emerald-950 text-emerald-300 border-emerald-900',
+    failed: 'bg-red-950 text-red-300 border-red-900',
+  };
+  return (
+    <span
+      className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border ${colors[status]}`}
+    >
+      {status === 'running' ? 'running…' : status}
+    </span>
+  );
+}
+
+function EventLine({ event }: { event: LiveTask['events'][number] }) {
+  if (event.kind === 'tool_call') {
+    const data = event.data as Record<string, unknown> | undefined;
+    let detail = '';
+    if (event.toolName === 'write_file' && data) {
+      detail = `${data.path} (${data.bytes ?? 0}B)`;
+    } else if (event.toolName === 'read_file' && data) {
+      detail = String(data.path ?? '');
+    } else if (event.toolName === 'list_files' && data) {
+      detail = String(data.directory ?? '');
+    } else if (event.toolName === 'install_packages' && data) {
+      const pkgs = (data.packages as string[]) ?? [];
+      detail = pkgs.join(' ');
+    } else if (event.toolName === 'run_command' && data) {
+      detail = String(data.command ?? '');
+    }
+    return (
+      <>
+        <span className="text-neutral-400">{event.toolName}</span>{' '}
+        <span>{detail}</span>
+      </>
+    );
+  }
+  if (event.kind === 'tool_result') {
+    const data = event.data as { ok?: boolean; error?: string } | undefined;
+    return (
+      <span className={data?.ok === false ? 'text-red-400' : 'text-neutral-600'}>
+        {event.toolName} → {data?.ok === false ? `failed: ${data.error}` : 'ok'}
+      </span>
+    );
+  }
+  if (event.kind === 'text') {
+    return <span className="text-neutral-400">{event.text}</span>;
+  }
+  return <span className="text-red-400">{event.text ?? 'error'}</span>;
 }

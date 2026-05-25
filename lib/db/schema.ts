@@ -101,6 +101,14 @@ export const participantRoleEnum = pgEnum('participant_role', [
   'agent',
 ]);
 
+export const taskStatusEnum = pgEnum('task_status', [
+  'queued',
+  'running',
+  'complete',
+  'failed',
+  'cancelled',
+]);
+
 export const rooms = pgTable('rooms', {
   id: text('id')
     .primaryKey()
@@ -122,6 +130,34 @@ export const rooms = pgTable('rooms', {
   createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
   archivedAt: timestamp('archived_at', { mode: 'date' }),
+});
+
+export type TaskEvent = {
+  ts: number;
+  kind: 'text' | 'tool_call' | 'tool_result' | 'error';
+  toolName?: string;
+  text?: string;
+  data?: unknown;
+};
+
+export const tasks = pgTable('tasks', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => nanoid()),
+  roomId: text('room_id')
+    .notNull()
+    .references(() => rooms.id, { onDelete: 'cascade' }),
+  // intents live in Mongo, so this is a soft reference (no FK)
+  intentId: text('intent_id'),
+  instruction: text('instruction').notNull(),
+  status: taskStatusEnum('status').notNull().default('queued'),
+  summary: text('summary'),
+  model: text('model'),
+  events: jsonb('events').$type<TaskEvent[]>().default([]),
+  error: text('error'),
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+  startedAt: timestamp('started_at', { mode: 'date' }),
+  completedAt: timestamp('completed_at', { mode: 'date' }),
 });
 
 export const participants = pgTable('participants', {
@@ -160,3 +196,5 @@ export type Room = typeof rooms.$inferSelect;
 export type NewRoom = typeof rooms.$inferInsert;
 export type Participant = typeof participants.$inferSelect;
 export type NewParticipant = typeof participants.$inferInsert;
+export type Task = typeof tasks.$inferSelect;
+export type NewTask = typeof tasks.$inferInsert;

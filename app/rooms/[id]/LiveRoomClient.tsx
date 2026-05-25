@@ -97,8 +97,24 @@ function InnerLayout({
   const connectionState = useConnectionState();
   const sttEnabled = connectionState === ConnectionState.Connected;
 
-  useBrowserSTT({ roomId, speakerName, enabled: sttEnabled });
-  const { feed, updateIntent } = useRoomFeed(initialFeed, roomId);
+  const { feed, updateIntent, addLocalTranscript, addLocalIntent, lastCompletedTaskId } =
+    useRoomFeed(initialFeed, roomId);
+
+  useBrowserSTT({
+    roomId,
+    speakerName,
+    enabled: sttEnabled,
+    onLocalTranscript: addLocalTranscript,
+    onLocalIntent: addLocalIntent,
+  });
+
+  // Bump the iframe key whenever a task completes so we force a fresh load
+  // (Vite HMR usually handles in-place updates already, but a hard reload
+  // catches any edge cases like new top-level routes or env changes).
+  const [iframeNonce, setIframeNonce] = useState(0);
+  useEffect(() => {
+    if (lastCompletedTaskId) setIframeNonce((n) => n + 1);
+  }, [lastCompletedTaskId]);
 
   return (
     <div className="flex-1 grid grid-cols-1 lg:grid-cols-[280px_1fr_360px] min-h-0">
@@ -113,7 +129,7 @@ function InnerLayout({
         <div className="flex-1 bg-white">
           {sandboxUrl ? (
             <iframe
-              key={sandboxUrl}
+              key={`${sandboxUrl}#${iframeNonce}`}
               src={sandboxUrl}
               className="w-full h-full border-0"
               title="Room artifact preview"
@@ -134,6 +150,7 @@ function InnerLayout({
         <AIPanel
           transcripts={feed.transcripts}
           intents={feed.intents}
+          tasks={feed.tasks}
           isHost={isHost}
           onUpdateIntent={updateIntent}
         />

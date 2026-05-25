@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
+import { eq } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { getIntentsCollection, type DetectedIntent } from '@/lib/db/mongo';
 import { db } from '@/lib/db';
-import { rooms } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { rooms, tasks } from '@/lib/db/schema';
+import { runTask } from '@/lib/exec/run-task';
 
 // Update an intent's status (Apply / Ignore / etc.) — host-only.
 export async function PATCH(
@@ -52,5 +53,28 @@ export async function PATCH(
     },
   );
   const updated = await intents.findOne({ id });
+
+  // When the host approves an intent, create a Task row and kick off the
+  // execution agent. We don't await — the response returns immediately and
+  // task progress streams back over the LiveKit data channel.
+  if (body.status === 'approved') {
+    const instruction = updated?.summary || intent.summary;
+    const [task] = await db
+      .insert(tasks)
+      .values({
+        roomId: intent.roomId,
+        intentId: intent.id,
+        instruction,
+        status: 'queued',
+      })
+      .returning();
+
+    runTask(task.id).catch((err) => {
+      console.error('[intents] runTask failed:', err);
+    });
+
+    return NextResponse.json({ ...updated, _taskId: task.id });
+  }
+
   return NextResponse.json(updated);
 }

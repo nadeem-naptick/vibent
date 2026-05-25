@@ -6,6 +6,7 @@ import { db } from '@/lib/db';
 import { rooms } from '@/lib/db/schema';
 import { OBJECTIVE_LABELS } from '@/lib/templates';
 import { SignOutButton } from '@/components/auth/SignOutButton';
+import { DeleteRoomButton } from '@/components/DeleteRoomButton';
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -55,12 +56,12 @@ export default async function DashboardPage() {
         ) : (
           <ul className="grid gap-3">
             {userRooms.map((room) => (
-              <li key={room.id}>
-                <Link
-                  href={`/rooms/${room.id}`}
-                  className="block rounded-lg border border-neutral-900 px-5 py-4 hover:border-neutral-700 hover:bg-neutral-925 transition-colors"
-                >
-                  <div className="flex items-center justify-between gap-4">
+              <li
+                key={room.id}
+                className="group relative rounded-lg border border-neutral-900 hover:border-neutral-700 hover:bg-neutral-925 transition-colors"
+              >
+                <Link href={`/rooms/${room.id}`} className="block px-5 py-4">
+                  <div className="flex items-center justify-between gap-4 pr-16">
                     <div className="space-y-1 min-w-0">
                       <div className="font-medium truncate">{room.title}</div>
                       <div className="text-xs text-neutral-500 flex items-center gap-2">
@@ -72,6 +73,9 @@ export default async function DashboardPage() {
                     <StatusBadge status={room.status} />
                   </div>
                 </Link>
+                <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <DeleteRoomButton roomId={room.id} roomTitle={room.title} />
+                </div>
               </li>
             ))}
           </ul>
