@@ -17,8 +17,6 @@ import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
 import { getLatestVersion, listVersions } from '@/lib/snapshots/manager';
 import { restoreRoomSandbox } from '@/lib/sandbox/room-sandbox';
 import { LiveRoomClient } from './LiveRoomClient';
-import { SignOutButton } from '@/components/auth/SignOutButton';
-import { SettingsButton } from './SettingsButton';
 import type { RoomFeed } from './types';
 
 export default async function RoomPage({
@@ -116,52 +114,21 @@ export default async function RoomPage({
   };
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col">
-      <header className="border-b border-neutral-900 px-6 py-3 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4 min-w-0">
-          <Link
-            href="/dashboard"
-            className="text-sm text-neutral-500 hover:text-neutral-300"
-          >
-            ← Dashboard
-          </Link>
-          <div className="min-w-0">
-            <div className="font-medium truncate">{liveRoom.title}</div>
-            <div className="text-xs text-neutral-500">
-              {OBJECTIVE_LABELS[liveRoom.objective]} ·{' '}
-              <RoomStatus status={liveRoom.status} />
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-neutral-500">
-            {participant.role} · {participant.displayName}
-          </span>
-          <SettingsButton />
-          <SignOutButton />
-        </div>
-      </header>
-
-      <LiveRoomClient
-        roomId={liveRoom.id}
-        token={token}
-        serverUrl={publicLiveKitUrl}
-        sandboxUrl={liveRoom.sandboxUrl}
-        status={liveRoom.status}
-        isHost={participant.role === 'host'}
-        speakerName={participant.displayName}
-        initialFeed={initialFeed}
-      />
-    </main>
+    <LiveRoomClient
+      roomId={liveRoom.id}
+      token={token}
+      serverUrl={publicLiveKitUrl}
+      sandboxUrl={liveRoom.sandboxUrl}
+      status={liveRoom.status}
+      isHost={participant.role === 'host'}
+      speakerName={participant.displayName}
+      initialFeed={initialFeed}
+      room={{
+        title: liveRoom.title,
+        objective: liveRoom.objective,
+        outputType: liveRoom.outputType,
+        context: liveRoom.context,
+      }}
+    />
   );
-}
-
-function RoomStatus({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    provisioning: 'text-amber-400',
-    active: 'text-emerald-400',
-    archived: 'text-neutral-500',
-    error: 'text-red-400',
-  };
-  return <span className={colors[status] ?? colors.archived}>{status}</span>;
 }

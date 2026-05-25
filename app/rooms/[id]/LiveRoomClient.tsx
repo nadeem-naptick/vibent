@@ -1,18 +1,28 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   LiveKitRoom,
   RoomAudioRenderer,
-  VideoConference,
   useConnectionState,
 } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
 import '@livekit/components-styles';
-import { AIPanel } from './AIPanel';
 import { useBrowserSTT } from './useBrowserSTT';
 import { useRoomFeed } from './useRoomFeed';
+import { useAutoCompose } from './useAutoCompose';
 import type { RoomFeed } from './types';
+import { TopBar } from './components/TopBar';
+import { ParticipantDock } from './components/ParticipantDock';
+import { DecisionStack } from './components/DecisionStack';
+import { BuildingStack } from './components/BuildingStack';
+import { SideRail, type DrawerType } from './components/SideRail';
+import { Drawer } from './components/Drawer';
+import { Canvas } from './components/Canvas';
+import { BottomActionCluster } from './components/BottomActionCluster';
+import { OBJECTIVE_LABELS } from '@/lib/templates';
+import type { Room } from '@/lib/db/schema';
 
 type Props = {
   roomId: string;
@@ -23,6 +33,7 @@ type Props = {
   isHost: boolean;
   speakerName: string;
   initialFeed: RoomFeed;
+  room: Pick<Room, 'title' | 'objective' | 'outputType' | 'context'>;
 };
 
 export function LiveRoomClient({
@@ -34,7 +45,9 @@ export function LiveRoomClient({
   isHost,
   speakerName,
   initialFeed,
+  room,
 }: Props) {
+  const router = useRouter();
   const [sandboxUrl, setSandboxUrl] = useState(initialSandboxUrl);
   const [status, setStatus] = useState(initialStatus);
 
@@ -50,42 +63,48 @@ export function LiveRoomClient({
         setSandboxUrl(data.sandboxUrl);
         if (data.status === 'active' || data.status === 'error') clearInterval(i);
       } catch {
-        // network blip — retry on next tick
+        // ignore
       }
     }, 2000);
     return () => clearInterval(i);
   }, [roomId, status]);
 
   return (
-    <LiveKitRoom
-      token={token}
-      serverUrl={serverUrl}
-      connect
-      video
-      audio
-      data-lk-theme="default"
-      className="flex-1 flex flex-col min-h-0"
-    >
-      <InnerLayout
-        roomId={roomId}
-        speakerName={speakerName}
-        isHost={isHost}
-        sandboxUrl={sandboxUrl}
-        status={status}
-        initialFeed={initialFeed}
-      />
-      <RoomAudioRenderer />
-    </LiveKitRoom>
+    <div className="relative h-screen w-screen overflow-hidden bg-[#05070A] text-white">
+      <LiveKitRoom
+        token={token}
+        serverUrl={serverUrl}
+        connect
+        video
+        audio
+        data-lk-theme="default"
+        className="absolute inset-0"
+      >
+        <RoomShell
+          roomId={roomId}
+          speakerName={speakerName}
+          isHost={isHost}
+          sandboxUrl={sandboxUrl}
+          status={status}
+          initialFeed={initialFeed}
+          room={room}
+          onExitRoom={() => router.push('/dashboard')}
+        />
+        <RoomAudioRenderer />
+      </LiveKitRoom>
+    </div>
   );
 }
 
-function InnerLayout({
+function RoomShell({
   roomId,
   speakerName,
   isHost,
   sandboxUrl,
   status,
   initialFeed,
+  room,
+  onExitRoom,
 }: {
   roomId: string;
   speakerName: string;
@@ -93,16 +112,14 @@ function InnerLayout({
   sandboxUrl: string | null;
   status: string;
   initialFeed: RoomFeed;
+  room: Props['room'];
+  onExitRoom: () => void;
 }) {
   const connectionState = useConnectionState();
   const sttEnabled = connectionState === ConnectionState.Connected;
 
   const { feed, updateIntent, addLocalTranscript, addLocalIntent, lastCompletedTaskId } =
     useRoomFeed(initialFeed, roomId);
-
-  // Used by rollback: bump iframe key explicitly so the preview reloads even
-  // if Vite's HMR doesn't pick up the rolled-back files immediately.
-  const [extraNonce, setExtraNonce] = useState(0);
 
   useBrowserSTT({
     roomId,
@@ -112,72 +129,79 @@ function InnerLayout({
     onLocalIntent: addLocalIntent,
   });
 
-  // Bump the iframe key whenever a task completes so we force a fresh load
-  // (Vite HMR usually handles in-place updates already, but a hard reload
-  // catches any edge cases like new top-level routes or env changes).
+  // Auto-compose lifecycle (preserved from before — drives the DecisionStack)
+  const autoCompose = useAutoCompose({
+    roomId,
+    intents: feed.intents,
+    isHost,
+    onIgnoreIntent: (id) => updateIntent(id, { status: 'ignored' }),
+    onPoolComposed: () => {
+      // Could pop the Tasks drawer here, but the BuildingStack already
+      // surfaces the new task in the bottom-right.
+    },
+  });
+
+  // Iframe refresh on task completion (Vite HMR handles most cases but this
+  // forces a hard reload as a safety net).
   const [iframeNonce, setIframeNonce] = useState(0);
   useEffect(() => {
     if (lastCompletedTaskId) setIframeNonce((n) => n + 1);
   }, [lastCompletedTaskId]);
+  const [rollbackNonce, setRollbackNonce] = useState(0);
+  const iframeKey = `${sandboxUrl ?? 'none'}#${iframeNonce}#${rollbackNonce}`;
+
+  const [drawer, setDrawer] = useState<DrawerType | null>(null);
+
+  const activeTaskCount = feed.tasks.filter(
+    (t) => t.status === 'queued' || t.status === 'running',
+  ).length;
+
+  const subtitle =
+    OBJECTIVE_LABELS[room.objective as keyof typeof OBJECTIVE_LABELS] ?? room.objective;
 
   return (
-    <div className="flex-1 grid grid-cols-1 lg:grid-cols-[280px_1fr_360px] min-h-0">
-      <section className="border-r border-neutral-900 min-h-[40vh] lg:min-h-0 bg-black">
-        <VideoConference />
-      </section>
+    <>
+      <Canvas sandboxUrl={sandboxUrl} status={status} iframeKey={iframeKey} />
 
-      <section className="flex flex-col min-h-0">
-        <div className="border-b border-neutral-900 px-4 py-2 text-xs uppercase tracking-widest text-neutral-500">
-          Live preview
-        </div>
-        <div className="flex-1 bg-white">
-          {sandboxUrl ? (
-            <iframe
-              key={`${sandboxUrl}#${iframeNonce}#${extraNonce}`}
-              src={sandboxUrl}
-              className="w-full h-full border-0"
-              title="Room artifact preview"
-            />
-          ) : status === 'error' ? (
-            <PreviewMessage tone="error">
-              Sandbox provisioning failed. Check server logs.
-            </PreviewMessage>
-          ) : (
-            <PreviewMessage tone="info">
-              Provisioning workspace… this takes 10–30 seconds.
-            </PreviewMessage>
-          )}
-        </div>
-      </section>
+      <TopBar roomTitle={room.title} roomSubtitle={subtitle} />
 
-      <section className="border-l border-neutral-900 min-h-[40vh] lg:min-h-0">
-        <AIPanel
-          roomId={roomId}
-          transcripts={feed.transcripts}
-          intents={feed.intents}
-          tasks={feed.tasks}
-          versions={feed.versions}
-          isHost={isHost}
-          onUpdateIntent={updateIntent}
-          onRolledBack={() => setExtraNonce((n) => n + 1)}
-        />
-      </section>
-    </div>
-  );
-}
+      <DecisionStack
+        pending={autoCompose.pending}
+        pool={autoCompose.pool}
+        threshold={autoCompose.threshold}
+        composing={autoCompose.composing}
+        onRemovePending={autoCompose.removePending}
+        onRemoveFromPool={autoCompose.removeFromPool}
+        isHost={isHost}
+      />
 
-function PreviewMessage({
-  tone,
-  children,
-}: {
-  tone: 'info' | 'error';
-  children: React.ReactNode;
-}) {
-  const colors =
-    tone === 'error' ? 'bg-red-50 text-red-900' : 'bg-neutral-50 text-neutral-600';
-  return (
-    <div className={`h-full flex items-center justify-center ${colors}`}>
-      <p className="text-sm">{children}</p>
-    </div>
+      <BuildingStack tasks={feed.tasks} />
+
+      <SideRail
+        badges={{
+          transcript: feed.transcripts.length,
+          tasks: activeTaskCount,
+          versions: feed.versions.length,
+        }}
+        onOpen={setDrawer}
+      />
+
+      <ParticipantDock />
+
+      <BottomActionCluster roomId={roomId} onExitRoom={onExitRoom} />
+
+      <Drawer
+        type={drawer}
+        onClose={() => setDrawer(null)}
+        roomId={roomId}
+        room={room}
+        transcripts={feed.transcripts}
+        intents={feed.intents}
+        tasks={feed.tasks}
+        versions={feed.versions}
+        isHost={isHost}
+        onRolledBack={() => setRollbackNonce((n) => n + 1)}
+      />
+    </>
   );
 }
