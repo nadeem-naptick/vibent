@@ -4,6 +4,7 @@ import type { TaskEvent } from '@/lib/db/schema';
 export type LiveTask = {
   id: string;
   intentId: string | null;
+  sourceIntentIds?: string[] | null;
   instruction: string;
   status: 'queued' | 'running' | 'complete' | 'failed' | 'cancelled';
   model?: string | null;

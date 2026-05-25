@@ -147,8 +147,10 @@ export const tasks = pgTable('tasks', {
   roomId: text('room_id')
     .notNull()
     .references(() => rooms.id, { onDelete: 'cascade' }),
-  // intents live in Mongo, so this is a soft reference (no FK)
+  // Legacy single-intent linkage from the auto-approve flow. New compose
+  // flow uses sourceIntentIds (jsonb) so one task can be built from many.
   intentId: text('intent_id'),
+  sourceIntentIds: jsonb('source_intent_ids').$type<string[]>().default([]),
   instruction: text('instruction').notNull(),
   status: taskStatusEnum('status').notNull().default('queued'),
   summary: text('summary'),

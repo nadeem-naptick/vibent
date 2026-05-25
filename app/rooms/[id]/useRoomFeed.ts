@@ -48,6 +48,8 @@ function reducer(state: State, action: Action): State {
         status: 'running',
         model: action.payload.model,
         events: [],
+        createdAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
       };
       return { ...state, tasks: [t, ...state.tasks] };
     }

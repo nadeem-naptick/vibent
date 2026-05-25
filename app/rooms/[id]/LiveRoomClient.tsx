@@ -148,6 +148,7 @@ function InnerLayout({
 
       <section className="border-l border-neutral-900 min-h-[40vh] lg:min-h-0">
         <AIPanel
+          roomId={roomId}
           transcripts={feed.transcripts}
           intents={feed.intents}
           tasks={feed.tasks}

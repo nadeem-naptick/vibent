@@ -89,6 +89,38 @@ export async function classifyUtterance({
   return object;
 }
 
+// ---------------------------------------------------------------------------
+// Decision composer — merges N detections into one coherent instruction
+// ---------------------------------------------------------------------------
+
+type ComposeInput = {
+  roomObjective?: string;
+  detections: Array<{ type: string; summary: string; rawText: string; speakerName: string }>;
+  provider?: IntelProvider;
+};
+
+export async function composeDecision({
+  roomObjective,
+  detections,
+  provider,
+}: ComposeInput): Promise<string> {
+  const { object } = await generateObject({
+    model: resolveModel(provider),
+    schema: z.object({ instruction: z.string().min(2).max(1500) }),
+    temperature: 0.3,
+    prompt: `You're helping a product team turn raw discussion fragments into ONE clear, actionable instruction for a code-editing agent.
+
+The team is shaping ${roomObjective ? `a ${roomObjective}` : 'a digital artifact'}. The host has hand-picked the following detections from their discussion as the ones that matter:
+
+${detections
+  .map((d, i) => `${i + 1}. [${d.type}] ${d.speakerName}: "${d.rawText}" (gist: ${d.summary})`)
+  .join('\n')}
+
+Compose a single, concrete instruction (2-5 sentences) that an executing agent could act on directly. Treat constraints and ideas as guardrails. Treat instructions and decisions as the primary intent. Drop anything that's a question or off-topic. Speak in second-person imperative ("Add…", "Change…", "Remove…"). Do NOT include explanations or justifications — just the instruction itself.`,
+  });
+  return object.instruction;
+}
+
 function buildPrompt({
   text,
   speakerName,
