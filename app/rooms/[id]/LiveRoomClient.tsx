@@ -135,7 +135,7 @@ function RoomShell({
   const { feed, updateIntent, addLocalTranscript, addLocalIntent, lastCompletedTaskId } =
     useRoomFeed(initialFeed, roomId);
 
-  const { settings } = useSettings();
+  const { settings, update: updateSettings, limits: thresholdLimits } = useSettings();
 
   // Fire toast notifications on task / version state changes
   useRoomToasts({ tasks: feed.tasks, versions: feed.versions });
@@ -185,6 +185,7 @@ function RoomShell({
         status={status}
         iframeKey={iframeKey}
         deviceFrame={settings.deviceFrame}
+        roomId={roomId}
       />
 
       <TopBar roomTitle={room.title} roomSubtitle={subtitle} />
@@ -200,7 +201,7 @@ function RoomShell({
         isHost={isHost}
       />
 
-      <BuildingStack tasks={feed.tasks} />
+      <BuildingStack tasks={feed.tasks} isHost={isHost} />
 
       <SideRail
         badges={{
@@ -213,7 +214,13 @@ function RoomShell({
 
       <ParticipantDock />
 
-      <BottomActionCluster roomId={roomId} onExitRoom={onExitRoom} />
+      <BottomActionCluster
+        roomId={roomId}
+        onExitRoom={onExitRoom}
+        settings={settings}
+        updateSettings={updateSettings}
+        thresholdLimits={thresholdLimits}
+      />
 
       <Drawer
         type={drawer}

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Loader2, AlertTriangle } from 'lucide-react';
 
 import type { DeviceFrame } from '../useSettings';
@@ -9,6 +10,7 @@ type Props = {
   status: string;
   iframeKey: string;
   deviceFrame: DeviceFrame;
+  roomId: string;
 };
 
 const FRAME_WIDTHS: Record<DeviceFrame, string> = {
@@ -23,7 +25,7 @@ const FRAME_HEIGHTS: Record<DeviceFrame, string> = {
   desktop: '100%',
 };
 
-export function Canvas({ sandboxUrl, status, iframeKey, deviceFrame }: Props) {
+export function Canvas({ sandboxUrl, status, iframeKey, deviceFrame, roomId }: Props) {
   const isFramed = deviceFrame !== 'desktop';
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-[#05070A] overflow-hidden">
@@ -36,15 +38,20 @@ export function Canvas({ sandboxUrl, status, iframeKey, deviceFrame }: Props) {
       <div
         className={`relative ${
           isFramed
-            ? 'flex items-center justify-center w-full h-full p-8'
+            ? 'flex flex-col items-center justify-center gap-3 w-full h-full p-8'
             : 'absolute inset-0 px-4 py-4'
         }`}
       >
+        {isFramed && (
+          <div className="rounded-full border border-white/15 bg-slate-950/70 px-3 py-1 text-xs text-white/65 backdrop-blur-xl shadow-lg">
+            {deviceFrame === 'mobile' ? 'Mobile preview · 390×844' : 'Tablet preview · 820×1180'}
+          </div>
+        )}
         <div
           className="relative overflow-hidden rounded-[28px] border border-white/8 bg-[#0B0F14] shadow-[0_40px_120px_rgba(0,0,0,.58)] transition-all duration-300"
           style={{
             width: isFramed ? FRAME_WIDTHS[deviceFrame] : '100%',
-            height: isFramed ? `min(${FRAME_HEIGHTS[deviceFrame]}, calc(100vh - 200px))` : '100%',
+            height: isFramed ? `min(${FRAME_HEIGHTS[deviceFrame]}, calc(100vh - 220px))` : '100%',
             maxWidth: isFramed ? '95%' : undefined,
           }}
         >
@@ -57,7 +64,7 @@ export function Canvas({ sandboxUrl, status, iframeKey, deviceFrame }: Props) {
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             />
           ) : status === 'error' ? (
-            <PreviewError />
+            <PreviewError roomId={roomId} />
           ) : (
             <PreviewLoading status={status} />
           )}
@@ -113,20 +120,51 @@ function PreviewLoading({ status }: { status: string }) {
   );
 }
 
-function PreviewError() {
+function PreviewError({ roomId }: { roomId: string }) {
+  const [recreating, setRecreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function recreate() {
+    if (!confirm('Recreate sandbox from the Vite template? Your last successful version snapshot stays intact in the Versions drawer.')) return;
+    setRecreating(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/recreate`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `recreate failed (${res.status})`);
+      }
+      // Polling in LiveRoomClient picks up the status flip.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'recreate failed');
+      setRecreating(false);
+    }
+  }
+
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#1A0B0B]">
-      <div className="h-full w-full flex flex-col items-center justify-center gap-3 text-center px-8">
+      <div className="h-full w-full flex flex-col items-center justify-center gap-4 text-center px-8">
         <div className="grid h-12 w-12 place-items-center rounded-full bg-red-500/15">
           <AlertTriangle size={24} className="text-red-300" />
         </div>
         <div className="text-base font-semibold text-red-100">
-          Sandbox provisioning failed
+          Sandbox could not be restored
         </div>
-        <div className="text-sm text-red-200/60 max-w-md">
-          Check server logs or try recreating the room. If your snapshot is
-          intact, the rollback flow in the Versions drawer can recover state.
+        <div className="text-sm text-red-200/60 max-w-md leading-relaxed">
+          The sandbox provider didn&apos;t respond (often: stale token, expired
+          OIDC). Click below to provision a fresh sandbox from the Vite
+          template. Your saved versions are preserved.
         </div>
+        {error && (
+          <div className="text-xs text-red-300 max-w-md">{error}</div>
+        )}
+        <button
+          onClick={recreate}
+          disabled={recreating}
+          className="rounded-2xl bg-white text-red-950 px-5 py-2.5 text-sm font-semibold shadow-xl hover:bg-blue-100 disabled:opacity-50 transition-colors"
+        >
+          {recreating ? 'Recreating…' : 'Recreate sandbox'}
+        </button>
       </div>
     </div>
   );

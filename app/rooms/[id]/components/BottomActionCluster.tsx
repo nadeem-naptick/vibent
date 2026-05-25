@@ -2,17 +2,27 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Settings2, Maximize2, Download, LogOut, Smartphone, Tablet, Monitor } from 'lucide-react';
-import { useSettings, type DeviceFrame } from '../useSettings';
+import type { RoomSettings, DeviceFrame } from '../useSettings';
 
 type Props = {
   roomId: string;
   onExitRoom: () => void;
+  settings: RoomSettings;
+  updateSettings: (patch: Partial<RoomSettings>) => void;
+  thresholdLimits: { MIN_THRESHOLD: number; MAX_THRESHOLD: number };
 };
 
-export function BottomActionCluster({ roomId, onExitRoom }: Props) {
+export function BottomActionCluster({
+  roomId,
+  onExitRoom,
+  settings,
+  updateSettings,
+  thresholdLimits,
+}: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
-  const { settings, update, limits } = useSettings();
+  const update = updateSettings;
+  const limits = thresholdLimits;
 
   useEffect(() => {
     if (!settingsOpen) return;
@@ -128,20 +138,26 @@ function DeviceFrameToggle({
   ];
   return (
     <div className="flex items-center gap-1 rounded-2xl border-2 border-white/20 bg-slate-950/70 p-1 shadow-2xl backdrop-blur-2xl">
-      {frames.map(({ id, icon: Icon, label }) => (
-        <button
-          key={id}
-          onClick={() => onChange(id)}
-          title={label}
-          className={`grid h-11 w-11 place-items-center rounded-xl transition-colors ${
-            value === id
-              ? 'bg-blue-500/30 text-blue-100'
-              : 'text-white/60 hover:bg-white/5 hover:text-white'
-          }`}
-        >
-          <Icon size={18} />
-        </button>
-      ))}
+      {frames.map(({ id, icon: Icon, label }) => {
+        const active = value === id;
+        return (
+          <button
+            key={id}
+            onClick={() => onChange(id)}
+            title={label}
+            className={`grid h-11 place-items-center rounded-xl transition-all px-3 ${
+              active
+                ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/40'
+                : 'w-11 text-white/55 hover:bg-white/5 hover:text-white'
+            }`}
+          >
+            <span className="flex items-center gap-1.5">
+              <Icon size={18} />
+              {active && <span className="text-xs font-medium">{label}</span>}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

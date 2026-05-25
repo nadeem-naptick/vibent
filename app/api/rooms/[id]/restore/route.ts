@@ -56,8 +56,30 @@ export async function POST(
     .where(eq(rooms.id, id));
 
   restoring.add(id);
-  restoreRoomSandbox(id, latest)
+  const startedAt = Date.now();
+  console.log(`[restore] starting for room ${id} from version v${latest.versionNumber}`);
+
+  // 90-second hard timeout — if the sandbox provider hangs (stale token,
+  // network issue) we want the user to see an actionable error state
+  // rather than the spinner forever.
+  const TIMEOUT_MS = 90_000;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(
+      () =>
+        reject(
+          new Error(
+            `restore timed out after ${TIMEOUT_MS / 1000}s — sandbox provider likely down or token expired`,
+          ),
+        ),
+      TIMEOUT_MS,
+    );
+  });
+
+  Promise.race([restoreRoomSandbox(id, latest), timeoutPromise])
     .then(async (fresh) => {
+      console.log(
+        `[restore] complete for room ${id} in ${Date.now() - startedAt}ms — ${fresh.sandboxId}`,
+      );
       await db
         .update(rooms)
         .set({
@@ -69,7 +91,7 @@ export async function POST(
         .where(eq(rooms.id, id));
     })
     .catch(async (err) => {
-      console.error('[restore] failed for room', id, err);
+      console.error(`[restore] FAILED for room ${id}:`, err?.message ?? err);
       await db
         .update(rooms)
         .set({ status: 'error', updatedAt: new Date() })

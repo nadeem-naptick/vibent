@@ -2,15 +2,43 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Zap, Check } from 'lucide-react';
+import { Zap, Check, X } from 'lucide-react';
+import { toast } from 'sonner';
 import type { LiveTask } from '../types';
 
 type Props = {
   tasks: LiveTask[];
+  isHost: boolean;
 };
 
-export function BuildingStack({ tasks }: Props) {
+export function BuildingStack({ tasks, isHost }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
+
+  async function cancelTask(task: LiveTask) {
+    const isRunning = task.status === 'running';
+    const msg = isRunning
+      ? 'Stop this running task? Any files the agent has written will be rolled back to the last saved version.'
+      : 'Cancel this queued task?';
+    if (!confirm(msg)) return;
+    setCancellingIds((prev) => new Set(prev).add(task.id));
+    try {
+      const res = await fetch(`/api/tasks/${task.id}/cancel`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `cancel failed (${res.status})`);
+      }
+      toast.success(isRunning ? 'Task stopped · rolling back' : 'Task cancelled');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'cancel failed');
+    } finally {
+      setCancellingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(task.id);
+        return next;
+      });
+    }
+  }
 
   // Auto-fan the stack the moment a task starts running, so the user sees
   // progress without having to click. Auto-collapse again when nothing is
@@ -59,6 +87,8 @@ export function BuildingStack({ tasks }: Props) {
             expanded={expanded}
             stackSize={visible.length}
             onToggle={() => setExpanded((v) => !v)}
+            onCancel={isHost ? () => cancelTask(task) : undefined}
+            cancelling={cancellingIds.has(task.id)}
           />
         ))}
       </div>
@@ -72,32 +102,44 @@ function TaskCard({
   expanded,
   stackSize,
   onToggle,
+  onCancel,
+  cancelling,
 }: {
   task: LiveTask;
   index: number;
   expanded: boolean;
   stackSize: number;
   onToggle: () => void;
+  onCancel?: () => void;
+  cancelling: boolean;
 }) {
   const progress = computeProgress(task);
   const isLive = task.status === 'running';
   const isDone = task.status === 'complete';
   const isFailed = task.status === 'failed';
 
+  const isCancelled = task.status === 'cancelled';
+
   const borderColor = isFailed
     ? 'border-red-400/30'
+    : isCancelled
+    ? 'border-neutral-500/30'
     : isDone
     ? 'border-emerald-400/25'
     : 'border-blue-400/25';
 
   const accentText = isFailed
     ? 'text-red-200'
+    : isCancelled
+    ? 'text-neutral-300'
     : isDone
     ? 'text-emerald-100'
     : 'text-blue-100';
 
   const progressBar = isFailed
     ? 'bg-red-500'
+    : isCancelled
+    ? 'bg-neutral-500'
     : isDone
     ? 'bg-emerald-500'
     : 'bg-blue-500';
@@ -115,7 +157,7 @@ function TaskCard({
       className={`absolute top-0 left-0 right-0 cursor-pointer rounded-[24px] border ${borderColor} bg-[#0B0F14]/95 p-4 shadow-2xl backdrop-blur-2xl`}
       style={{ zIndex: stackSize - index }}
     >
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <div className={`flex items-center gap-2 text-sm font-semibold ${accentText}`}>
           {isDone ? <Check size={16} /> : <Zap size={isLive ? 16 : 14} className={isLive ? 'animate-pulse' : ''} />}
           <span className="capitalize">
@@ -125,12 +167,29 @@ function TaskCard({
               ? 'Queued'
               : task.status === 'complete'
               ? 'Done'
+              : task.status === 'cancelled'
+              ? 'Cancelled'
               : 'Failed'}
           </span>
         </div>
-        <span className={`text-[10px] ${accentText}`}>
-          {task.model?.split('/').pop() ?? ''}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`text-[10px] ${accentText}`}>
+            {task.model?.split('/').pop() ?? ''}
+          </span>
+          {onCancel && (task.status === 'queued' || task.status === 'running') && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancel();
+              }}
+              disabled={cancelling}
+              title={task.status === 'running' ? 'Stop and roll back' : 'Cancel'}
+              className="grid h-6 w-6 place-items-center rounded-full border border-white/10 bg-white/5 text-white/50 hover:text-red-300 hover:border-red-400/30 disabled:opacity-50"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex items-center justify-between text-xs gap-3">
         <span className="text-white/58 truncate min-w-0">{task.instruction}</span>

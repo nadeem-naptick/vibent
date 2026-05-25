@@ -111,6 +111,21 @@ You have these tools: list_files, read_file, write_file, install_packages, run_c
 
 const MAX_STEPS = 30;
 
+// In-process registry of AbortControllers for currently-running tasks so the
+// /api/tasks/[id]/cancel endpoint can interrupt them mid-flight.
+const taskControllers = new Map<string, AbortController>();
+
+export function isTaskRunning(taskId: string): boolean {
+  return taskControllers.has(taskId);
+}
+
+export function cancelRunningTask(taskId: string): boolean {
+  const controller = taskControllers.get(taskId);
+  if (!controller) return false;
+  controller.abort('cancelled by user');
+  return true;
+}
+
 export async function runTask(taskId: string): Promise<void> {
   const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
   if (!task) throw new Error(`task ${taskId} not found`);
@@ -142,6 +157,10 @@ export async function runTask(taskId: string): Promise<void> {
   const events: TaskEvent[] = [];
   const tools = createSandboxTools(sandbox);
 
+  // Register abort controller so /api/tasks/[id]/cancel can stop us
+  const abortController = new AbortController();
+  taskControllers.set(task.id, abortController);
+
   // Persist events to Postgres in batches so the polling GET /tasks endpoint
   // can surface progress between LLM steps. We don't broadcast over LiveKit
   // anymore — the data API rejects sendData for rooms with only WebRTC
@@ -156,6 +175,7 @@ export async function runTask(taskId: string): Promise<void> {
       model,
       tools,
       providerOptions: execProviderOptions(execProvider),
+      abortSignal: abortController.signal,
       stopWhen: ({ steps }: { steps: unknown[] }) => steps.length >= MAX_STEPS,
       messages: [
         { role: 'system', content: buildSystemPrompt(room) },
@@ -210,16 +230,41 @@ export async function runTask(taskId: string): Promise<void> {
       console.warn('[run-task] post-task snapshot failed:', snapErr);
     }
   } catch (err) {
+    const isAbort =
+      abortController.signal.aborted ||
+      (err instanceof Error &&
+        (err.name === 'AbortError' || /abort/i.test(err.message)));
     const message = err instanceof Error ? err.message : String(err);
     await db
       .update(tasks)
       .set({
-        status: 'failed',
+        status: isAbort ? 'cancelled' : 'failed',
         completedAt: new Date(),
-        error: message,
+        error: isAbort ? 'Cancelled by user' : message,
         events,
       })
       .where(eq(tasks.id, task.id));
+
+    // On cancel, restore the sandbox to the state it was in BEFORE this task
+    // started (the latest pre-task version snapshot) so the iframe rolls
+    // back any partial writes the agent made.
+    if (isAbort) {
+      try {
+        const { getLatestVersion } = await import('@/lib/snapshots/manager');
+        const { snapshotStore } = await import('@/lib/snapshots/store');
+        const { restoreProject } = await import('@/lib/snapshots/snapshot');
+        const latest = await getLatestVersion(room.id);
+        if (latest) {
+          const snap = await snapshotStore().load(latest.snapshotPath);
+          await restoreProject(sandbox, snap);
+          console.log(`[run-task] cancelled task ${task.id} — rolled back to v${latest.versionNumber}`);
+        }
+      } catch (rollbackErr) {
+        console.warn('[run-task] post-cancel rollback failed:', rollbackErr);
+      }
+    }
+  } finally {
+    taskControllers.delete(task.id);
   }
 }
 
