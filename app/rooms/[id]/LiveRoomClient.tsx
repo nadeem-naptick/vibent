@@ -3,10 +3,16 @@
 import { useEffect, useState } from 'react';
 import {
   LiveKitRoom,
-  VideoConference,
   RoomAudioRenderer,
+  VideoConference,
+  useConnectionState,
 } from '@livekit/components-react';
+import { ConnectionState } from 'livekit-client';
 import '@livekit/components-styles';
+import { AIPanel } from './AIPanel';
+import { useBrowserSTT } from './useBrowserSTT';
+import { useRoomFeed } from './useRoomFeed';
+import type { RoomFeed } from './types';
 
 type Props = {
   roomId: string;
@@ -14,6 +20,9 @@ type Props = {
   serverUrl: string;
   sandboxUrl: string | null;
   status: string;
+  isHost: boolean;
+  speakerName: string;
+  initialFeed: RoomFeed;
 };
 
 export function LiveRoomClient({
@@ -22,12 +31,14 @@ export function LiveRoomClient({
   serverUrl,
   sandboxUrl: initialSandboxUrl,
   status: initialStatus,
+  isHost,
+  speakerName,
+  initialFeed,
 }: Props) {
-  // Poll while the sandbox is still provisioning. Once it's active the URL
-  // is set and we render the preview.
   const [sandboxUrl, setSandboxUrl] = useState(initialSandboxUrl);
   const [status, setStatus] = useState(initialStatus);
 
+  // Poll while the sandbox is still provisioning.
   useEffect(() => {
     if (status === 'active' || status === 'archived') return;
     const i = setInterval(async () => {
@@ -37,9 +48,7 @@ export function LiveRoomClient({
         const data = await res.json();
         setStatus(data.status);
         setSandboxUrl(data.sandboxUrl);
-        if (data.status === 'active' || data.status === 'error') {
-          clearInterval(i);
-        }
+        if (data.status === 'active' || data.status === 'error') clearInterval(i);
       } catch {
         // network blip — retry on next tick
       }
@@ -48,23 +57,56 @@ export function LiveRoomClient({
   }, [roomId, status]);
 
   return (
-    <div className="flex-1 flex flex-col lg:flex-row min-h-0">
-      <section className="lg:w-1/3 border-r border-neutral-900 min-h-[40vh] lg:min-h-0 bg-black">
-        <LiveKitRoom
-          token={token}
-          serverUrl={serverUrl}
-          connect
-          video
-          audio
-          data-lk-theme="default"
-          className="h-full"
-        >
-          <VideoConference />
-          <RoomAudioRenderer />
-        </LiveKitRoom>
+    <LiveKitRoom
+      token={token}
+      serverUrl={serverUrl}
+      connect
+      video
+      audio
+      data-lk-theme="default"
+      className="flex-1 flex flex-col min-h-0"
+    >
+      <InnerLayout
+        roomId={roomId}
+        speakerName={speakerName}
+        isHost={isHost}
+        sandboxUrl={sandboxUrl}
+        status={status}
+        initialFeed={initialFeed}
+      />
+      <RoomAudioRenderer />
+    </LiveKitRoom>
+  );
+}
+
+function InnerLayout({
+  roomId,
+  speakerName,
+  isHost,
+  sandboxUrl,
+  status,
+  initialFeed,
+}: {
+  roomId: string;
+  speakerName: string;
+  isHost: boolean;
+  sandboxUrl: string | null;
+  status: string;
+  initialFeed: RoomFeed;
+}) {
+  const connectionState = useConnectionState();
+  const sttEnabled = connectionState === ConnectionState.Connected;
+
+  useBrowserSTT({ roomId, speakerName, enabled: sttEnabled });
+  const { feed, updateIntent } = useRoomFeed(initialFeed, roomId);
+
+  return (
+    <div className="flex-1 grid grid-cols-1 lg:grid-cols-[280px_1fr_360px] min-h-0">
+      <section className="border-r border-neutral-900 min-h-[40vh] lg:min-h-0 bg-black">
+        <VideoConference />
       </section>
 
-      <section className="flex-1 flex flex-col min-h-0">
+      <section className="flex flex-col min-h-0">
         <div className="border-b border-neutral-900 px-4 py-2 text-xs uppercase tracking-widest text-neutral-500">
           Live preview
         </div>
@@ -86,6 +128,15 @@ export function LiveRoomClient({
             </PreviewMessage>
           )}
         </div>
+      </section>
+
+      <section className="border-l border-neutral-900 min-h-[40vh] lg:min-h-0">
+        <AIPanel
+          transcripts={feed.transcripts}
+          intents={feed.intents}
+          isHost={isHost}
+          onUpdateIntent={updateIntent}
+        />
       </section>
     </div>
   );

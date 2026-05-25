@@ -6,8 +6,14 @@ import { db } from '@/lib/db';
 import { rooms, participants } from '@/lib/db/schema';
 import { mintLiveKitToken, publicLiveKitUrl } from '@/lib/livekit';
 import { OBJECTIVE_LABELS } from '@/lib/templates';
+import {
+  ensureIndexes,
+  getIntentsCollection,
+  getTranscriptsCollection,
+} from '@/lib/db/mongo';
 import { LiveRoomClient } from './LiveRoomClient';
 import { SignOutButton } from '@/components/auth/SignOutButton';
+import type { RoomFeed } from './types';
 
 export default async function RoomPage({
   params,
@@ -55,6 +61,22 @@ export default async function RoomPage({
     role: participant.role as 'host' | 'collaborator' | 'viewer',
   });
 
+  // Load existing transcripts + intents so the AI panel renders on first paint
+  // for late joiners, not just future utterances.
+  await ensureIndexes();
+  const [transcriptDocs, intentDocs] = await Promise.all([
+    getTranscriptsCollection().then((c) =>
+      c.find({ roomId: room.id }).sort({ createdAt: 1 }).limit(200).toArray(),
+    ),
+    getIntentsCollection().then((c) =>
+      c.find({ roomId: room.id }).sort({ createdAt: -1 }).limit(100).toArray(),
+    ),
+  ]);
+  const initialFeed: RoomFeed = {
+    transcripts: JSON.parse(JSON.stringify(transcriptDocs)),
+    intents: JSON.parse(JSON.stringify(intentDocs)),
+  };
+
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col">
       <header className="border-b border-neutral-900 px-6 py-3 flex items-center justify-between gap-4">
@@ -87,6 +109,9 @@ export default async function RoomPage({
         serverUrl={publicLiveKitUrl}
         sandboxUrl={room.sandboxUrl}
         status={room.status}
+        isHost={participant.role === 'host'}
+        speakerName={participant.displayName}
+        initialFeed={initialFeed}
       />
     </main>
   );
