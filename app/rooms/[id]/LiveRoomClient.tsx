@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   LiveKitRoom,
@@ -15,16 +15,15 @@ import { useAutoCompose } from './useAutoCompose';
 import { useRoomToasts } from './useRoomToasts';
 import { useSettings } from './useSettings';
 import type { RoomFeed } from './types';
-import { TopBar } from './components/TopBar';
 import { ParticipantDock } from './components/ParticipantDock';
 import { DecisionStack } from './components/DecisionStack';
 import { BuildingStack } from './components/BuildingStack';
-import { SideRail, type DrawerType } from './components/SideRail';
+import { TopCenterRail, type DrawerType } from './components/TopCenterRail';
 import { Drawer } from './components/Drawer';
 import { Canvas } from './components/Canvas';
 import { BottomActionCluster } from './components/BottomActionCluster';
 import { DeviceToggle } from './components/DeviceToggle';
-import { OBJECTIVE_LABELS } from '@/lib/templates';
+import { ExitFocusPill } from './components/ExitFocusPill';
 import type { Room } from '@/lib/db/schema';
 
 type Props = {
@@ -174,8 +173,27 @@ function RoomShell({
     (t) => t.status === 'queued' || t.status === 'running',
   ).length;
 
-  const subtitle =
-    OBJECTIVE_LABELS[room.objective as keyof typeof OBJECTIVE_LABELS] ?? room.objective;
+  // Focus mode: hide all chrome, keep STT/tasks/agent running in background
+  const focusMode = settings.focusMode;
+  const enterFocus = useCallback(() => updateSettings({ focusMode: true }), [updateSettings]);
+  const exitFocus = useCallback(() => updateSettings({ focusMode: false }), [updateSettings]);
+
+  // Keyboard shortcut: F toggles focus mode (unless user is typing in an input)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'f' && e.key !== 'F') return;
+      const target = e.target as HTMLElement;
+      const isTyping =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable;
+      if (isTyping) return;
+      if (focusMode) exitFocus();
+      else enterFocus();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focusMode, enterFocus, exitFocus]);
 
   return (
     <>
@@ -187,58 +205,62 @@ function RoomShell({
         roomId={roomId}
       />
 
-      <TopBar roomTitle={room.title} roomSubtitle={subtitle} />
+      {focusMode ? (
+        <ExitFocusPill onClick={exitFocus} />
+      ) : (
+        <>
+          <TopCenterRail
+            badges={{
+              transcript: feed.transcripts.length,
+              tasks: activeTaskCount,
+              versions: feed.versions.length,
+            }}
+            onOpen={setDrawer}
+          />
 
-      <DecisionStack
-        roomId={roomId}
-        pending={autoCompose.pending}
-        pool={autoCompose.pool}
-        threshold={autoCompose.threshold}
-        composing={autoCompose.composing}
-        onRemovePending={autoCompose.removePending}
-        onRemoveFromPool={autoCompose.removeFromPool}
-        onApplyNow={autoCompose.composeNow}
-        isHost={isHost}
-      />
+          <DecisionStack
+            roomId={roomId}
+            pending={autoCompose.pending}
+            pool={autoCompose.pool}
+            threshold={autoCompose.threshold}
+            composing={autoCompose.composing}
+            onRemovePending={autoCompose.removePending}
+            onRemoveFromPool={autoCompose.removeFromPool}
+            onApplyNow={autoCompose.composeNow}
+            isHost={isHost}
+          />
 
-      <BuildingStack tasks={feed.tasks} isHost={isHost} />
+          <BuildingStack tasks={feed.tasks} isHost={isHost} />
 
-      <SideRail
-        badges={{
-          transcript: feed.transcripts.length,
-          tasks: activeTaskCount,
-          versions: feed.versions.length,
-        }}
-        onOpen={setDrawer}
-      />
+          <ParticipantDock onEndCall={onExitRoom} />
 
-      <ParticipantDock />
+          <DeviceToggle
+            value={settings.deviceFrame}
+            onChange={(f) => updateSettings({ deviceFrame: f })}
+          />
 
-      <DeviceToggle
-        value={settings.deviceFrame}
-        onChange={(f) => updateSettings({ deviceFrame: f })}
-      />
+          <BottomActionCluster
+            roomId={roomId}
+            settings={settings}
+            updateSettings={updateSettings}
+            thresholdLimits={thresholdLimits}
+            onEnterFocus={enterFocus}
+          />
 
-      <BottomActionCluster
-        roomId={roomId}
-        onExitRoom={onExitRoom}
-        settings={settings}
-        updateSettings={updateSettings}
-        thresholdLimits={thresholdLimits}
-      />
-
-      <Drawer
-        type={drawer}
-        onClose={() => setDrawer(null)}
-        roomId={roomId}
-        room={room}
-        transcripts={feed.transcripts}
-        intents={feed.intents}
-        tasks={feed.tasks}
-        versions={feed.versions}
-        isHost={isHost}
-        onRolledBack={() => setRollbackNonce((n) => n + 1)}
-      />
+          <Drawer
+            type={drawer}
+            onClose={() => setDrawer(null)}
+            roomId={roomId}
+            room={room}
+            transcripts={feed.transcripts}
+            intents={feed.intents}
+            tasks={feed.tasks}
+            versions={feed.versions}
+            isHost={isHost}
+            onRolledBack={() => setRollbackNonce((n) => n + 1)}
+          />
+        </>
+      )}
     </>
   );
 }

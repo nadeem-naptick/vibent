@@ -2,6 +2,39 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import type { SandboxProvider } from '@/lib/sandbox/types';
 
+// Thrown by any tool when the underlying sandbox has gone away (expired,
+// killed, OOM). run-task catches this specifically so it can mark the task
+// as failed-with-recovery and auto-trigger a restore instead of returning
+// the raw E2B error string to the user.
+export class SandboxLostError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SandboxLostError';
+  }
+}
+
+const LOST_PATTERNS = [
+  /sandbox\s+.*\s+wasn['’]t\s+found/i,
+  /sandbox\s+.*\s+not\s+found/i,
+  /sandbox\s+has\s+been\s+killed/i,
+  /sandbox\s+has\s+expired/i,
+  /sandbox\s+is\s+terminated/i,
+  /connection\s+to\s+sandbox\s+lost/i,
+];
+
+function isSandboxLostError(err: unknown): boolean {
+  if (!err) return false;
+  const msg = err instanceof Error ? err.message : String(err);
+  return LOST_PATTERNS.some((rx) => rx.test(msg));
+}
+
+function rethrowIfLost(err: unknown): never | void {
+  if (isSandboxLostError(err)) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new SandboxLostError(msg);
+  }
+}
+
 // Tools the execution agent uses to read/write/run things inside the room's
 // per-room sandbox. Thin wrappers over SandboxProvider so the model sees a
 // clean, intent-aligned surface area.
@@ -24,6 +57,7 @@ export function createSandboxTools(sandbox: SandboxProvider) {
           const files = await sandbox.listFiles(directory);
           return { ok: true, files };
         } catch (err) {
+          rethrowIfLost(err);
           return { ok: false, error: errMsg(err) };
         }
       },
@@ -40,6 +74,7 @@ export function createSandboxTools(sandbox: SandboxProvider) {
           const content = await sandbox.readFile(path);
           return { ok: true, content };
         } catch (err) {
+          rethrowIfLost(err);
           return { ok: false, error: errMsg(err) };
         }
       },
@@ -57,6 +92,7 @@ export function createSandboxTools(sandbox: SandboxProvider) {
           await sandbox.writeFile(path, content);
           return { ok: true };
         } catch (err) {
+          rethrowIfLost(err);
           return { ok: false, error: errMsg(err) };
         }
       },
@@ -78,6 +114,7 @@ export function createSandboxTools(sandbox: SandboxProvider) {
             exitCode: result.exitCode,
           };
         } catch (err) {
+          rethrowIfLost(err);
           return { ok: false, error: errMsg(err) };
         }
       },
@@ -99,6 +136,7 @@ export function createSandboxTools(sandbox: SandboxProvider) {
             exitCode: result.exitCode,
           };
         } catch (err) {
+          rethrowIfLost(err);
           return { ok: false, error: errMsg(err) };
         }
       },

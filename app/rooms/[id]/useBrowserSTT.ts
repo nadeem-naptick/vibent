@@ -45,6 +45,49 @@ export function useBrowserSTT({
   // and reconnect (used when Deepgram closes us for inactivity).
   const [restartKey, setRestartKey] = useState(0);
 
+  // Mirror LiveKit's mute state. We pause/resume the MediaRecorder when this
+  // flips so muting also stops Deepgram from billing audio + classifying
+  // utterances. The WebSocket stays open via keepalive frames.
+  const [micEnabled, setMicEnabled] = useState(true);
+  useEffect(() => {
+    if (!localParticipant) return;
+    setMicEnabled(localParticipant.isMicrophoneEnabled);
+    const handler = () => setMicEnabled(localParticipant.isMicrophoneEnabled);
+    // Cast through unknown — LiveKit's `on` is typed via the strict
+    // ParticipantEvent enum, but the string-literal call signature also
+    // works at runtime and avoids importing the enum just for this.
+    const lp = localParticipant as unknown as {
+      on(ev: string, cb: () => void): void;
+      off(ev: string, cb: () => void): void;
+    };
+    lp.on('trackMuted', handler);
+    lp.on('trackUnmuted', handler);
+    return () => {
+      lp.off('trackMuted', handler);
+      lp.off('trackUnmuted', handler);
+    };
+  }, [localParticipant]);
+
+  useEffect(() => {
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+    if (!micEnabled && recorder.state === 'recording') {
+      try {
+        recorder.pause();
+        console.log('[stt] mic muted — paused recorder (Deepgram WS stays alive via keepalive)');
+      } catch (err) {
+        console.warn('[stt] pause failed:', err);
+      }
+    } else if (micEnabled && recorder.state === 'paused') {
+      try {
+        recorder.resume();
+        console.log('[stt] mic unmuted — resumed recorder');
+      } catch (err) {
+        console.warn('[stt] resume failed:', err);
+      }
+    }
+  }, [micEnabled]);
+
   useEffect(() => {
     if (!enabled || !localParticipant) {
       console.log('[stt] not starting — enabled=%s, localParticipant=%s', enabled, !!localParticipant);

@@ -34,13 +34,16 @@ export function Canvas({ sandboxUrl, status, iframeKey, deviceFrame, roomId }: P
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.025)_1px,transparent_1px)] bg-[size:44px_44px] opacity-50" />
 
       {/* Iframe wrapper — full canvas for desktop, centered with device frame
-          for mobile/tablet */}
+          for mobile/tablet. Note: cannot put both `relative` and `absolute`
+          in the same className — `relative` wins (later in Tailwind's CSS)
+          and inset-0 becomes a no-op, collapsing the iframe to its HTML
+          default 300×150. */}
       <div
-        className={`relative ${
+        className={
           isFramed
-            ? 'flex flex-col items-center justify-center gap-3 w-full h-full p-8'
+            ? 'relative flex flex-col items-center justify-center gap-3 w-full h-full p-8'
             : 'absolute inset-0 px-4 py-4'
-        }`}
+        }
       >
         {isFramed && (
           <div className="rounded-full border border-white/15 bg-slate-950/70 px-3 py-1 text-xs text-white/65 backdrop-blur-xl shadow-lg">

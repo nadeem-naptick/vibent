@@ -64,7 +64,7 @@ export function DecisionStack({
     : `${total} waiting · auto-bundles at ${threshold}`;
 
   return (
-    <div className="absolute left-5 top-32 z-30 w-[340px] pointer-events-none">
+    <div className="absolute left-5 top-24 z-30 w-[340px] pointer-events-none">
       {/* Header */}
       <div className="pointer-events-auto mb-3 rounded-[22px] border border-amber-400/30 bg-[#1A1209] shadow-2xl">
         <div className="flex items-center justify-between gap-2 px-4 py-3">

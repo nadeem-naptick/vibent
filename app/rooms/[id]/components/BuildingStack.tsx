@@ -69,7 +69,7 @@ export function BuildingStack({ tasks, isHost }: Props) {
   if (visible.length === 0) return null;
 
   return (
-    <div className="absolute right-24 top-32 z-30 w-[320px] pointer-events-none">
+    <div className="absolute right-5 top-24 z-30 w-[320px] pointer-events-none">
       <div
         className="relative pointer-events-auto"
         style={{

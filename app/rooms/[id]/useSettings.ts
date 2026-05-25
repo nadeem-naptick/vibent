@@ -19,12 +19,16 @@ export type RoomSettings = {
   // How wide the preview iframe is rendered. desktop = full canvas, tablet =
   // 768px, mobile = 390px (matches modern iPhone widths).
   deviceFrame: DeviceFrame;
+  // Hides all overlay chrome and shows only the canvas. The agent/STT/tasks
+  // keep running in the background.
+  focusMode: boolean;
 };
 
 const DEFAULT_SETTINGS: RoomSettings = {
   autoComposeThreshold: DEFAULT_THRESHOLD,
   countdownMs: DEFAULT_COUNTDOWN_MS,
   deviceFrame: 'desktop',
+  focusMode: false,
 };
 
 function read(): RoomSettings {
@@ -46,6 +50,7 @@ function read(): RoomSettings {
         parsed.deviceFrame === 'desktop'
           ? parsed.deviceFrame
           : 'desktop',
+      focusMode: Boolean(parsed.focusMode),
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -74,6 +79,7 @@ export function useSettings() {
         ),
         countdownMs: patch.countdownMs ?? prev.countdownMs,
         deviceFrame: patch.deviceFrame ?? prev.deviceFrame,
+        focusMode: patch.focusMode ?? prev.focusMode,
       };
       if (typeof window !== 'undefined') {
         try {

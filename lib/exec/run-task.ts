@@ -7,8 +7,13 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { rooms, tasks, type TaskEvent } from '@/lib/db/schema';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
-import { createSandboxTools } from './sandbox-tools';
+import { createSandboxTools, SandboxLostError } from './sandbox-tools';
 import { createVersion } from '@/lib/snapshots/manager';
+import { sandboxManager as sandboxManagerForRetry } from '@/lib/sandbox/sandbox-manager';
+import { provisionRoomSandbox } from '@/lib/sandbox/room-sandbox';
+import { db as dbForRetry } from '@/lib/db';
+import { rooms as roomsForRetry } from '@/lib/db/schema';
+import { eq as eqForRetry } from 'drizzle-orm';
 import { OBJECTIVE_LABELS, OUTPUT_TYPE_LABELS } from '@/lib/templates';
 
 // ---------------------------------------------------------------------------
@@ -242,16 +247,55 @@ export async function runTask(taskId: string): Promise<void> {
       abortController.signal.aborted ||
       (err instanceof Error &&
         (err.name === 'AbortError' || /abort/i.test(err.message)));
-    const message = err instanceof Error ? err.message : String(err);
+    const isSandboxLost = err instanceof SandboxLostError;
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    const friendlyMessage = isAbort
+      ? 'Cancelled by user'
+      : isSandboxLost
+      ? `Sandbox expired during execution. A fresh one is being provisioned — try this task again in 30–60s.`
+      : rawMessage;
+
     await db
       .update(tasks)
       .set({
         status: isAbort ? 'cancelled' : 'failed',
         completedAt: new Date(),
-        error: isAbort ? 'Cancelled by user' : message,
+        error: friendlyMessage,
         events,
       })
       .where(eq(tasks.id, task.id));
+
+    // Sandbox died mid-task: kick off background recreation so the room is
+    // usable again on the user's next attempt.
+    if (isSandboxLost) {
+      console.warn('[run-task] sandbox lost mid-task — triggering recreate');
+      // Remove the dead handle from the manager so the next task tries to
+      // reattach (which will fail) and then recreates.
+      try {
+        sandboxManagerForRetry.terminateSandbox(sandboxId).catch(() => {});
+      } catch {
+        // ignore
+      }
+      // Best-effort recreate in the background; updates room with new
+      // sandboxId/url when done. Don't await — let the user see "expired"
+      // first and decide to retry.
+      provisionRoomSandbox(room.id)
+        .then(async (fresh) => {
+          await dbForRetry
+            .update(roomsForRetry)
+            .set({
+              sandboxId: fresh.sandboxId,
+              sandboxUrl: fresh.url,
+              status: 'active',
+              updatedAt: new Date(),
+            })
+            .where(eqForRetry(roomsForRetry.id, room.id));
+          console.log('[run-task] recreate succeeded for room', room.id);
+        })
+        .catch((rerr) => {
+          console.error('[run-task] recreate after sandbox loss failed:', rerr);
+        });
+    }
 
     // On cancel, restore the sandbox to the state it was in BEFORE this task
     // started (the latest pre-task version snapshot) so the iframe rolls

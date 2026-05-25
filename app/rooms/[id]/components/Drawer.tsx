@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
-import type { DrawerType } from './SideRail';
+import type { DrawerType } from './TopCenterRail';
 import type { LiveTask, LiveVersion } from '../types';
 import type { DetectedIntent, TranscriptSegment } from '@/lib/db/mongo';
 import type { Room } from '@/lib/db/schema';

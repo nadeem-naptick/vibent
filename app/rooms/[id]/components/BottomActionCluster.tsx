@@ -1,23 +1,24 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Settings2, Maximize2, Download, LogOut } from 'lucide-react';
+import { Settings2, Maximize2, Download, Focus } from 'lucide-react';
 import type { RoomSettings } from '../useSettings';
+import { PillButton } from './PillButton';
 
 type Props = {
   roomId: string;
-  onExitRoom: () => void;
   settings: RoomSettings;
   updateSettings: (patch: Partial<RoomSettings>) => void;
   thresholdLimits: { MIN_THRESHOLD: number; MAX_THRESHOLD: number };
+  onEnterFocus: () => void;
 };
 
 export function BottomActionCluster({
   roomId,
-  onExitRoom,
   settings,
   updateSettings,
   thresholdLimits,
+  onEnterFocus,
 }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -55,14 +56,11 @@ export function BottomActionCluster({
     <div className="absolute bottom-6 right-6 z-30 flex items-center gap-3">
       {/* Settings popover */}
       <div className="relative" ref={popoverRef}>
-        <button
-          onClick={() => setSettingsOpen((v) => !v)}
+        <PillButton
+          icon={Settings2}
           title="Room settings"
-          style={{ width: '56px', height: '56px' }}
-          className="grid place-items-center rounded-2xl border-2 border-white/20 bg-slate-950/70 text-white/75 shadow-2xl backdrop-blur-2xl hover:text-white"
-        >
-          <Settings2 size={22} />
-        </button>
+          onClick={() => setSettingsOpen((v) => !v)}
+        />
         {settingsOpen && (
           <div className="absolute bottom-full right-0 mb-2 w-72 rounded-2xl border border-white/10 bg-[#0B0F14]/95 shadow-2xl backdrop-blur-2xl p-4">
             <h3 className="text-xs uppercase tracking-widest text-white/45 mb-3">
@@ -89,32 +87,21 @@ export function BottomActionCluster({
         )}
       </div>
 
-      <button
-        onClick={toggleFullscreen}
-        title="Fullscreen"
-        style={{ width: '56px', height: '56px' }}
-        className="grid place-items-center rounded-2xl border-2 border-white/20 bg-slate-950/70 text-white/75 shadow-2xl backdrop-blur-2xl hover:text-white"
-      >
-        <Maximize2 size={22} />
-      </button>
+      <PillButton
+        icon={Focus}
+        title="Focus mode — hide all chrome (F)"
+        onClick={onEnterFocus}
+      />
 
-      <button
+      <PillButton icon={Maximize2} title="Fullscreen" onClick={toggleFullscreen} />
+
+      <PillButton
+        icon={Download}
+        label="Export"
+        title="Export project"
         onClick={downloadExport}
-        title="Export"
-        style={{ height: '56px' }}
-        className="flex items-center gap-2 rounded-2xl bg-white px-6 text-base font-semibold text-black shadow-2xl hover:bg-blue-100"
-      >
-        <Download size={20} /> Export
-      </button>
-
-      <button
-        onClick={onExitRoom}
-        title="Leave room"
-        style={{ width: '56px', height: '56px' }}
-        className="grid place-items-center rounded-2xl border-2 border-white/20 bg-slate-950/70 text-white/75 shadow-2xl backdrop-blur-2xl hover:text-red-300 hover:border-red-400/40"
-      >
-        <LogOut size={22} />
-      </button>
+        variant="primary"
+      />
     </div>
   );
 }

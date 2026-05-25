@@ -2,14 +2,25 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mic, MicOff, Radio } from 'lucide-react';
 import {
+  PhoneOff,
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+  MonitorUp,
+  Users,
+  Radio,
+} from 'lucide-react';
+import {
+  useLocalParticipant,
   useParticipants,
   useTracks,
   VideoTrack,
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
+import { PillButton } from './PillButton';
 
 const GRADIENTS = [
   'bg-gradient-to-br from-blue-950 via-blue-700 to-slate-950',
@@ -21,22 +32,118 @@ const GRADIENTS = [
   'bg-gradient-to-br from-emerald-950 via-emerald-800 to-slate-950',
 ];
 
-export function ParticipantDock() {
+type Props = {
+  onEndCall: () => void;
+};
+
+export function ParticipantDock({ onEndCall }: Props) {
   const participants = useParticipants();
-  if (participants.length === 0) return null;
 
   return (
-    <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-end gap-3 rounded-[28px] border border-white/15 bg-slate-950/70 p-2.5 shadow-2xl backdrop-blur-2xl max-w-[calc(100vw-40px)] overflow-x-auto">
-      {participants.map((p, index) => (
-        <ParticipantTile key={p.identity} participant={p} index={index} />
-      ))}
+    <div
+      className="absolute bottom-6 z-30 flex flex-col items-center gap-3 pointer-events-none"
+      style={{
+        left: '50%',
+        transform: 'translateX(-50%)',
+      }}
+    >
+      {/* Video tiles — always render so the toolbar has a consistent anchor.
+          When there's no one, just the toolbar shows. */}
+      {participants.length > 0 && (
+        <div className="pointer-events-auto flex items-end gap-3 rounded-[28px] border border-white/15 bg-slate-950/70 p-2.5 shadow-2xl backdrop-blur-2xl overflow-x-auto max-w-[calc(100vw-200px)]">
+          {participants.map((p, index) => (
+            <ParticipantTile key={p.identity} participant={p} index={index} />
+          ))}
+        </div>
+      )}
+
+      {/* Toolbar — people count, mic, cam, share, end call */}
+      <div className="pointer-events-auto">
+        <ParticipantToolbar onEndCall={onEndCall} participantCount={participants.length} />
+      </div>
+    </div>
+  );
+}
+
+function ParticipantToolbar({
+  onEndCall,
+  participantCount,
+}: {
+  onEndCall: () => void;
+  participantCount: number;
+}) {
+  const { localParticipant } = useLocalParticipant();
+  const [mic, setMic] = useState(true);
+  const [camera, setCamera] = useState(true);
+
+  useEffect(() => {
+    if (!localParticipant) return;
+    setMic(localParticipant.isMicrophoneEnabled);
+    setCamera(localParticipant.isCameraEnabled);
+  }, [localParticipant]);
+
+  async function toggleMic() {
+    if (!localParticipant) return;
+    const next = !mic;
+    setMic(next);
+    try {
+      await localParticipant.setMicrophoneEnabled(next);
+    } catch {
+      setMic(!next);
+    }
+  }
+
+  async function toggleCamera() {
+    if (!localParticipant) return;
+    const next = !camera;
+    setCamera(next);
+    try {
+      await localParticipant.setCameraEnabled(next);
+    } catch {
+      setCamera(!next);
+    }
+  }
+
+  async function toggleScreenShare() {
+    if (!localParticipant) return;
+    try {
+      await localParticipant.setScreenShareEnabled(!localParticipant.isScreenShareEnabled);
+    } catch (err) {
+      console.error('[toolbar] share toggle failed:', err);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      <PillButton
+        icon={Users}
+        title={`${participantCount} ${participantCount === 1 ? 'person' : 'people'}`}
+        variant="active"
+      />
+      <PillButton
+        icon={mic ? Mic : MicOff}
+        title={mic ? 'Mute mic' : 'Unmute mic'}
+        onClick={toggleMic}
+        variant={mic ? 'default' : 'danger'}
+      />
+      <PillButton
+        icon={camera ? Video : VideoOff}
+        title={camera ? 'Stop camera' : 'Start camera'}
+        onClick={toggleCamera}
+        variant={camera ? 'default' : 'danger'}
+      />
+      <PillButton icon={MonitorUp} title="Share screen" onClick={toggleScreenShare} />
+      <PillButton
+        icon={PhoneOff}
+        title="Leave room"
+        onClick={onEndCall}
+        variant="danger"
+      />
     </div>
   );
 }
 
 function ParticipantTile({ participant, index }: { participant: Participant; index: number }) {
-  // Subscribe to this participant's camera track (if any) so we render the
-  // actual video feed when their camera is on.
   const trackRefs = useTracks(
     [{ source: Track.Source.Camera, withPlaceholder: false }],
     { onlySubscribed: false },
@@ -49,8 +156,6 @@ function ParticipantTile({ participant, index }: { participant: Participant; ind
   const micEnabled = participant.isMicrophoneEnabled;
   const displayName = participant.name || participant.identity;
 
-  // Poll audioLevel for a smooth-ish VU bar. LiveKit updates this in real
-  // time via internal listeners — we mirror into state so the bar re-renders.
   const [audioLevel, setAudioLevel] = useState(0);
   useEffect(() => {
     let raf = 0;
@@ -66,11 +171,7 @@ function ParticipantTile({ participant, index }: { participant: Participant; ind
     <div className="group relative">
       <motion.div
         initial={{ opacity: 0, y: 18 }}
-        animate={{
-          opacity: 1,
-          // Speaking participant subtly lifts above the rest
-          y: isSpeaking ? -8 : 0,
-        }}
+        animate={{ opacity: 1, y: isSpeaking ? -8 : 0 }}
         transition={{ delay: index * 0.05, type: 'spring', stiffness: 300, damping: 25 }}
         style={{ width: '160px', height: '100px' }}
         className={`relative overflow-hidden rounded-[20px] border transition-all duration-300 hover:!w-[240px] hover:!h-[150px] ${
@@ -79,7 +180,6 @@ function ParticipantTile({ participant, index }: { participant: Participant; ind
             : 'border-white/15 shadow-2xl'
         } ${!micEnabled ? 'opacity-60 saturate-50' : ''}`}
       >
-        {/* Video or gradient fallback */}
         {cameraTrack ? (
           <VideoTrack
             trackRef={cameraTrack as never}
@@ -95,14 +195,12 @@ function ParticipantTile({ participant, index }: { participant: Participant; ind
           </>
         )}
 
-        {/* Muted overlay icon — top-right, only when mic off */}
         {!micEnabled && (
           <div className="absolute top-2 right-2 grid h-6 w-6 place-items-center rounded-full bg-black/60 backdrop-blur-sm">
             <MicOff size={12} className="text-red-300" />
           </div>
         )}
 
-        {/* Name + status overlay */}
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-2.5 pt-4">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
@@ -118,7 +216,6 @@ function ParticipantTile({ participant, index }: { participant: Participant; ind
             ) : null}
           </div>
 
-          {/* Audio level bar — only visible when mic on */}
           {micEnabled && (
             <div className="mt-1.5 h-0.5 w-full rounded-full bg-white/10 overflow-hidden">
               <div
