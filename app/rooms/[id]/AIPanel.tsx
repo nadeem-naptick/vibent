@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DetectedIntent, IntentType, TranscriptSegment } from '@/lib/db/mongo';
 import type { LiveTask } from './types';
 
@@ -275,53 +275,94 @@ function TaskList({ tasks }: { tasks: LiveTask[] }) {
       </Empty>
     );
   }
+  // Show position-in-queue for queued tasks (FIFO).
+  const queuedOrder = tasks
+    .filter((t) => t.status === 'queued')
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .map((t) => t.id);
+
   return (
     <ul className="divide-y divide-neutral-900">
-      {tasks.map((task) => (
-        <li key={task.id} className="px-4 py-3 space-y-2">
-          <div className="flex items-center gap-2">
-            <TaskStatusBadge status={task.status} />
-            {task.model && (
-              <span className="text-[10px] text-neutral-600">{task.model}</span>
-            )}
-          </div>
-          <div className="text-sm text-neutral-200 leading-snug">{task.instruction}</div>
-          {task.events.length > 0 && (
-            <ol className="mt-2 space-y-1 border-l border-neutral-800 pl-3">
-              {task.events.map((ev, i) => (
-                <li key={i} className="text-xs text-neutral-500 leading-snug">
-                  <EventLine event={ev} />
-                </li>
-              ))}
-            </ol>
-          )}
-          {task.summary && task.status === 'complete' && (
-            <div className="text-xs text-neutral-400 italic mt-2 leading-snug">
-              {task.summary}
+      {tasks.map((task) => {
+        const queuePos = queuedOrder.indexOf(task.id);
+        return (
+          <li key={task.id} className="px-4 py-3 space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <TaskStatusBadge status={task.status} />
+              {task.status === 'queued' && queuePos >= 0 && (
+                <span className="text-[10px] text-neutral-500">
+                  position {queuePos + 1}
+                </span>
+              )}
+              <TaskTimer task={task} />
+              {task.model && (
+                <span className="text-[10px] text-neutral-600 ml-auto">{task.model}</span>
+              )}
             </div>
-          )}
-          {task.error && (
-            <div className="text-xs text-red-400 mt-2 leading-snug">{task.error}</div>
-          )}
-        </li>
-      ))}
+            <div className="text-sm text-neutral-200 leading-snug">{task.instruction}</div>
+            {task.events.length > 0 && (
+              <ol className="mt-2 space-y-1 border-l border-neutral-800 pl-3">
+                {task.events.map((ev, i) => (
+                  <li key={i} className="text-xs text-neutral-500 leading-snug">
+                    <EventLine event={ev} />
+                  </li>
+                ))}
+              </ol>
+            )}
+            {task.summary && task.status === 'complete' && (
+              <div className="text-xs text-neutral-400 italic mt-2 leading-snug">
+                {task.summary}
+              </div>
+            )}
+            {task.error && (
+              <div className="text-xs text-red-400 mt-2 leading-snug font-mono">
+                {task.error}
+              </div>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
 function TaskStatusBadge({ status }: { status: LiveTask['status'] }) {
   const colors: Record<LiveTask['status'], string> = {
-    running: 'bg-blue-950 text-blue-300 border-blue-900',
+    queued: 'bg-neutral-900 text-neutral-400 border-neutral-800',
+    running: 'bg-blue-950 text-blue-300 border-blue-900 animate-pulse',
     complete: 'bg-emerald-950 text-emerald-300 border-emerald-900',
     failed: 'bg-red-950 text-red-300 border-red-900',
+    cancelled: 'bg-neutral-900 text-neutral-500 border-neutral-800',
+  };
+  const labels: Record<LiveTask['status'], string> = {
+    queued: 'queued',
+    running: 'running…',
+    complete: 'complete',
+    failed: 'failed',
+    cancelled: 'cancelled',
   };
   return (
     <span
       className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border ${colors[status]}`}
     >
-      {status === 'running' ? 'running…' : status}
+      {labels[status]}
     </span>
   );
+}
+
+function TaskTimer({ task }: { task: LiveTask }) {
+  const [now, setNow] = useState(() => Date.now());
+  const isLive = task.status === 'running';
+  useEffect(() => {
+    if (!isLive) return;
+    const i = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(i);
+  }, [isLive]);
+  if (!task.startedAt) return null;
+  const start = new Date(task.startedAt).getTime();
+  const end = task.completedAt ? new Date(task.completedAt).getTime() : now;
+  const sec = Math.max(0, Math.round((end - start) / 1000));
+  return <span className="text-[10px] text-neutral-500 tabular-nums">{sec}s</span>;
 }
 
 function EventLine({ event }: { event: LiveTask['events'][number] }) {

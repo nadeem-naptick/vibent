@@ -8,8 +8,6 @@ import { db } from '@/lib/db';
 import { rooms, tasks, type TaskEvent } from '@/lib/db/schema';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
 import { createSandboxTools } from './sandbox-tools';
-import { publishToRoom } from '@/lib/livekit-publish';
-import { FEED_TOPIC } from '@/app/rooms/[id]/types';
 import { OBJECTIVE_LABELS, OUTPUT_TYPE_LABELS } from '@/lib/templates';
 
 // ---------------------------------------------------------------------------
@@ -122,18 +120,17 @@ export async function runTask(taskId: string): Promise<void> {
     .set({ status: 'running', startedAt: new Date(), model: modelLabel })
     .where(eq(tasks.id, task.id));
 
-  await publishToRoom(room.id, FEED_TOPIC, {
-    kind: 'task_started',
-    payload: {
-      taskId: task.id,
-      instruction: task.instruction,
-      intentId: task.intentId,
-      model: modelLabel,
-    },
-  });
-
   const events: TaskEvent[] = [];
   const tools = createSandboxTools(sandbox);
+
+  // Persist events to Postgres in batches so the polling GET /tasks endpoint
+  // can surface progress between LLM steps. We don't broadcast over LiveKit
+  // anymore — the data API rejects sendData for rooms with only WebRTC
+  // participants ("Not Found: requested room does not exist") and made the
+  // whole agent appear to crash mid-run.
+  const flushEvents = async () => {
+    await db.update(tasks).set({ events }).where(eq(tasks.id, task.id));
+  };
 
   try {
     const result = await generateText({
@@ -146,39 +143,25 @@ export async function runTask(taskId: string): Promise<void> {
       ],
       onStepFinish: async ({ text, toolCalls, toolResults }) => {
         if (text?.trim()) {
-          const ev: TaskEvent = { ts: Date.now(), kind: 'text', text };
-          events.push(ev);
-          await publishToRoom(room.id, FEED_TOPIC, {
-            kind: 'task_event',
-            payload: { taskId: task.id, event: ev },
-          });
+          events.push({ ts: Date.now(), kind: 'text', text });
         }
         for (const tc of toolCalls ?? []) {
-          const ev: TaskEvent = {
+          events.push({
             ts: Date.now(),
             kind: 'tool_call',
             toolName: tc.toolName,
             data: summarizeToolInput(tc.toolName, tc.input),
-          };
-          events.push(ev);
-          await publishToRoom(room.id, FEED_TOPIC, {
-            kind: 'task_event',
-            payload: { taskId: task.id, event: ev },
           });
         }
         for (const tr of toolResults ?? []) {
-          const ev: TaskEvent = {
+          events.push({
             ts: Date.now(),
             kind: 'tool_result',
             toolName: tr.toolName,
             data: summarizeToolResult(tr.toolName, tr.output),
-          };
-          events.push(ev);
-          await publishToRoom(room.id, FEED_TOPIC, {
-            kind: 'task_event',
-            payload: { taskId: task.id, event: ev },
           });
         }
+        await flushEvents();
       },
     });
 
@@ -191,15 +174,6 @@ export async function runTask(taskId: string): Promise<void> {
         events,
       })
       .where(eq(tasks.id, task.id));
-
-    await publishToRoom(room.id, FEED_TOPIC, {
-      kind: 'task_complete',
-      payload: {
-        taskId: task.id,
-        summary: result.text || null,
-        intentId: task.intentId,
-      },
-    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await db
@@ -211,22 +185,14 @@ export async function runTask(taskId: string): Promise<void> {
         events,
       })
       .where(eq(tasks.id, task.id));
-    await publishToRoom(room.id, FEED_TOPIC, {
-      kind: 'task_failed',
-      payload: { taskId: task.id, error: message, intentId: task.intentId },
-    });
   }
 }
 
-async function failTask(taskId: string, roomId: string, error: string) {
+async function failTask(taskId: string, _roomId: string, error: string) {
   await db
     .update(tasks)
     .set({ status: 'failed', error, completedAt: new Date() })
     .where(eq(tasks.id, taskId));
-  await publishToRoom(roomId, FEED_TOPIC, {
-    kind: 'task_failed',
-    payload: { taskId, error },
-  });
 }
 
 // Trim verbose payloads so the timeline UI stays readable.

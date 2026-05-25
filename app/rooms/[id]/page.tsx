@@ -11,6 +11,8 @@ import {
   getIntentsCollection,
   getTranscriptsCollection,
 } from '@/lib/db/mongo';
+import { tasks } from '@/lib/db/schema';
+import { desc } from 'drizzle-orm';
 import { LiveRoomClient } from './LiveRoomClient';
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import type { RoomFeed } from './types';
@@ -61,20 +63,27 @@ export default async function RoomPage({
     role: participant.role as 'host' | 'collaborator' | 'viewer',
   });
 
-  // Load existing transcripts + intents so the AI panel renders on first paint
-  // for late joiners, not just future utterances.
+  // Load existing transcripts + intents + tasks so the AI panel renders on
+  // first paint for late joiners.
   await ensureIndexes();
-  const [transcriptDocs, intentDocs] = await Promise.all([
+  const [transcriptDocs, intentDocs, taskRows] = await Promise.all([
     getTranscriptsCollection().then((c) =>
       c.find({ roomId: room.id }).sort({ createdAt: 1 }).limit(200).toArray(),
     ),
     getIntentsCollection().then((c) =>
       c.find({ roomId: room.id }).sort({ createdAt: -1 }).limit(100).toArray(),
     ),
+    db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.roomId, room.id))
+      .orderBy(desc(tasks.createdAt))
+      .limit(20),
   ]);
   const initialFeed: RoomFeed = {
     transcripts: JSON.parse(JSON.stringify(transcriptDocs)),
     intents: JSON.parse(JSON.stringify(intentDocs)),
+    tasks: JSON.parse(JSON.stringify(taskRows)),
   };
 
   return (

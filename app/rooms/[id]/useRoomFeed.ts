@@ -18,7 +18,8 @@ type Action =
   | { type: 'task_event'; payload: Extract<FeedMessage, { kind: 'task_event' }>['payload'] }
   | { type: 'task_complete'; payload: Extract<FeedMessage, { kind: 'task_complete' }>['payload'] }
   | { type: 'task_failed'; payload: Extract<FeedMessage, { kind: 'task_failed' }>['payload'] }
-  | { type: 'replace'; payload: State };
+  | { type: 'replace_feed'; payload: { transcripts: TranscriptSegment[]; intents: DetectedIntent[] } }
+  | { type: 'replace_tasks'; payload: LiveTask[] };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -80,8 +81,14 @@ function reducer(state: State, action: Action): State {
         ),
       };
     }
-    case 'replace':
-      return action.payload;
+    case 'replace_feed':
+      return {
+        ...state,
+        transcripts: action.payload.transcripts,
+        intents: action.payload.intents,
+      };
+    case 'replace_tasks':
+      return { ...state, tasks: action.payload };
   }
 }
 
@@ -128,8 +135,8 @@ export function useRoomFeed(initial: RoomFeed, roomId: string) {
     }
   });
 
-  // Polling fallback — useful before LiveKit connects and as a self-heal in
-  // case data channel messages get dropped while a tab is backgrounded.
+  // Slow polling for transcripts + intents (15s) — self-heal if data channel
+  // messages got dropped while a tab was backgrounded.
   useEffect(() => {
     let cancelled = false;
     const i = setInterval(async () => {
@@ -139,12 +146,8 @@ export function useRoomFeed(initial: RoomFeed, roomId: string) {
         const fresh = (await res.json()) as RoomFeed;
         if (!cancelled) {
           dispatch({
-            type: 'replace',
-            payload: {
-              transcripts: fresh.transcripts,
-              intents: fresh.intents,
-              tasks: fresh.tasks ?? [],
-            },
+            type: 'replace_feed',
+            payload: { transcripts: fresh.transcripts, intents: fresh.intents },
           });
         }
       } catch {
@@ -156,6 +159,35 @@ export function useRoomFeed(initial: RoomFeed, roomId: string) {
       clearInterval(i);
     };
   }, [roomId]);
+
+  // Fast polling for tasks (1s while any task is active, 5s otherwise).
+  // Polling is the authoritative path now since LiveKit Cloud's sendData API
+  // rejects server-side publish for rooms with only WebRTC participants.
+  const hasActive = state.tasks.some(
+    (t) => t.status === 'queued' || t.status === 'running',
+  );
+  useEffect(() => {
+    let cancelled = false;
+    const intervalMs = hasActive ? 1_000 : 5_000;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/tasks`);
+        if (!res.ok) return;
+        const { tasks } = (await res.json()) as { tasks: LiveTask[] };
+        if (!cancelled) {
+          dispatch({ type: 'replace_tasks', payload: tasks });
+        }
+      } catch {
+        // ignore
+      }
+    };
+    tick();
+    const i = setInterval(tick, intervalMs);
+    return () => {
+      cancelled = true;
+      clearInterval(i);
+    };
+  }, [roomId, hasActive]);
 
   const updateIntent = useCallback(
     async (

@@ -5,11 +5,14 @@ export type LiveTask = {
   id: string;
   intentId: string | null;
   instruction: string;
-  status: 'running' | 'complete' | 'failed';
-  model?: string;
+  status: 'queued' | 'running' | 'complete' | 'failed' | 'cancelled';
+  model?: string | null;
   summary?: string | null;
-  error?: string;
+  error?: string | null;
   events: TaskEvent[];
+  createdAt: string; // ISO from server
+  startedAt?: string | null;
+  completedAt?: string | null;
 };
 
 export type RoomFeed = {

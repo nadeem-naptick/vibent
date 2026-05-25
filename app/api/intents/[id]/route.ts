@@ -4,7 +4,7 @@ import { auth } from '@/auth';
 import { getIntentsCollection, type DetectedIntent } from '@/lib/db/mongo';
 import { db } from '@/lib/db';
 import { rooms, tasks } from '@/lib/db/schema';
-import { runTask } from '@/lib/exec/run-task';
+import { dispatchQueuedTasksForRoom } from '@/lib/exec/queue';
 
 // Update an intent's status (Apply / Ignore / etc.) — host-only.
 export async function PATCH(
@@ -69,9 +69,10 @@ export async function PATCH(
       })
       .returning();
 
-    runTask(task.id).catch((err) => {
-      console.error('[intents] runTask failed:', err);
-    });
+    // Kick the queue — if another task is running for this room, ours
+    // waits its turn. dispatchQueuedTasksForRoom drains queued tasks in
+    // FIFO order, one at a time per room.
+    dispatchQueuedTasksForRoom(intent.roomId);
 
     return NextResponse.json({ ...updated, _taskId: task.id });
   }
