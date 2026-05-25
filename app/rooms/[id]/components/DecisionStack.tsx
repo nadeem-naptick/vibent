@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Wand2, X, Sparkles } from 'lucide-react';
+import { Wand2, X, Sparkles, PenLine } from 'lucide-react';
 import type { DetectedIntent } from '@/lib/db/mongo';
+import { DraftDecisionModal } from './DraftDecisionModal';
 
 type PendingItem = {
   intent: DetectedIntent;
@@ -12,6 +13,7 @@ type PendingItem = {
 };
 
 type Props = {
+  roomId: string;
   pending: PendingItem[];
   pool: DetectedIntent[];
   threshold: number;
@@ -23,6 +25,7 @@ type Props = {
 };
 
 export function DecisionStack({
+  roomId,
   pending,
   pool,
   threshold,
@@ -33,6 +36,7 @@ export function DecisionStack({
   isHost,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [drafting, setDrafting] = useState(false);
 
   // Combine pending (newest, with countdown) and pool (already locked) into one
   // visual stack. Pending live at the front of the stack visually.
@@ -60,9 +64,9 @@ export function DecisionStack({
     : `${total} waiting · auto-bundles at ${threshold}`;
 
   return (
-    <div className="absolute left-5 top-24 z-30 w-[340px] pointer-events-none">
+    <div className="absolute left-5 top-32 z-30 w-[340px] pointer-events-none">
       {/* Header */}
-      <div className="pointer-events-auto mb-3 rounded-[22px] border border-amber-400/30 bg-[#1A1209]/95 shadow-2xl backdrop-blur-2xl">
+      <div className="pointer-events-auto mb-3 rounded-[22px] border border-amber-400/30 bg-[#1A1209] shadow-2xl">
         <div className="flex items-center justify-between gap-2 px-4 py-3">
           <div className="min-w-0 flex items-center gap-2.5">
             {isEmpty && (
@@ -75,14 +79,25 @@ export function DecisionStack({
               <div className="text-xs text-amber-200/60 truncate">{headline}</div>
             </div>
           </div>
-          {items.length > 0 && (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="shrink-0 rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1.5 text-xs text-amber-100 hover:bg-amber-300/20"
-            >
-              {expanded ? 'Collapse' : 'Expand'}
-            </button>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {isHost && (
+              <button
+                onClick={() => setDrafting(true)}
+                title="Draft a decision manually"
+                className="grid h-8 w-8 place-items-center rounded-full border border-amber-300/20 bg-amber-300/10 text-amber-100 hover:bg-amber-300/20"
+              >
+                <PenLine size={14} />
+              </button>
+            )}
+            {items.length > 0 && (
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1.5 text-xs text-amber-100 hover:bg-amber-300/20"
+              >
+                {expanded ? 'Collapse' : 'Expand'}
+              </button>
+            )}
+          </div>
         </div>
         {isHost && items.length > 0 && !composing && (
           <div className="border-t border-amber-400/20 px-4 py-2.5">
@@ -95,6 +110,14 @@ export function DecisionStack({
           </div>
         )}
       </div>
+
+      {drafting && (
+        <DraftDecisionModal
+          roomId={roomId}
+          onClose={() => setDrafting(false)}
+          onSubmitted={() => setDrafting(false)}
+        />
+      )}
 
       {/* Stack — capped at 60vh when expanded, scrollable beyond */}
       {items.length > 0 && (
@@ -117,7 +140,7 @@ export function DecisionStack({
                 zIndex: items.length - index,
               }}
               transition={{ type: 'spring', stiffness: 260, damping: 28 }}
-              className="absolute left-0 right-0 rounded-[22px] border border-amber-400/30 bg-[#1A1209]/97 p-4 shadow-2xl backdrop-blur-2xl overflow-hidden"
+              className="absolute left-0 right-0 rounded-[22px] border border-amber-400/30 bg-[#1A1209] p-4 shadow-2xl overflow-hidden"
               style={{ zIndex: items.length - index }}
             >
               {/* Countdown progress bar (only for pending items) */}

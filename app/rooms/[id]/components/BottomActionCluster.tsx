@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Settings2, Maximize2, Download, LogOut, Smartphone, Tablet, Monitor } from 'lucide-react';
-import type { RoomSettings, DeviceFrame } from '../useSettings';
+import { Settings2, Maximize2, Download, LogOut } from 'lucide-react';
+import type { RoomSettings } from '../useSettings';
 
 type Props = {
   roomId: string;
@@ -53,11 +53,6 @@ export function BottomActionCluster({
 
   return (
     <div className="absolute bottom-6 right-6 z-30 flex items-center gap-3">
-      <DeviceFrameToggle
-        value={settings.deviceFrame}
-        onChange={(f) => update({ deviceFrame: f })}
-      />
-
       {/* Settings popover */}
       <div className="relative" ref={popoverRef}>
         <button
@@ -120,44 +115,6 @@ export function BottomActionCluster({
       >
         <LogOut size={22} />
       </button>
-    </div>
-  );
-}
-
-function DeviceFrameToggle({
-  value,
-  onChange,
-}: {
-  value: DeviceFrame;
-  onChange: (v: DeviceFrame) => void;
-}) {
-  const frames: { id: DeviceFrame; icon: typeof Monitor; label: string }[] = [
-    { id: 'desktop', icon: Monitor, label: 'Desktop' },
-    { id: 'tablet', icon: Tablet, label: 'Tablet' },
-    { id: 'mobile', icon: Smartphone, label: 'Mobile' },
-  ];
-  return (
-    <div className="flex items-center gap-1 rounded-2xl border-2 border-white/20 bg-slate-950/70 p-1 shadow-2xl backdrop-blur-2xl">
-      {frames.map(({ id, icon: Icon, label }) => {
-        const active = value === id;
-        return (
-          <button
-            key={id}
-            onClick={() => onChange(id)}
-            title={label}
-            className={`grid h-11 place-items-center rounded-xl transition-all px-3 ${
-              active
-                ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/40'
-                : 'w-11 text-white/55 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <span className="flex items-center gap-1.5">
-              <Icon size={18} />
-              {active && <span className="text-xs font-medium">{label}</span>}
-            </span>
-          </button>
-        );
-      })}
     </div>
   );
 }

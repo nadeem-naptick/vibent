@@ -138,14 +138,22 @@ export async function runTask(taskId: string): Promise<void> {
     await failTask(task.id, room.id, 'room has no provisioned sandbox');
     return;
   }
-  const sandbox = sandboxManager.getProvider(sandboxId);
+  let sandbox = sandboxManager.getProvider(sandboxId);
   if (!sandbox) {
-    await failTask(
-      task.id,
-      room.id,
-      `sandbox ${sandboxId} is not registered with this Next.js process (likely a server restart). The user needs to recreate the room.`,
-    );
-    return;
+    // Server restart wiped our in-memory registration. Try to reattach to
+    // the existing Vercel/E2B sandbox by ID — usually still alive even if
+    // we lost the handle.
+    const { reattachSandbox } = await import('@/lib/sandbox/reattach');
+    sandbox = await reattachSandbox(sandboxId, room.sandboxUrl ?? '');
+    if (!sandbox) {
+      await failTask(
+        task.id,
+        room.id,
+        `Could not reattach to sandbox ${sandboxId}. It may have expired — click "Recreate sandbox" in the preview area to start fresh.`,
+      );
+      return;
+    }
+    console.log(`[run-task] reattached to sandbox ${sandboxId} for room ${room.id}`);
   }
 
   const { model, label: modelLabel, provider: execProvider } = resolveModel();

@@ -69,7 +69,7 @@ export function BuildingStack({ tasks, isHost }: Props) {
   if (visible.length === 0) return null;
 
   return (
-    <div className="absolute right-24 top-24 z-30 w-[320px] pointer-events-none">
+    <div className="absolute right-24 top-32 z-30 w-[320px] pointer-events-none">
       <div
         className="relative pointer-events-auto"
         style={{
@@ -154,7 +154,7 @@ function TaskCard({
       }}
       transition={{ type: 'spring', stiffness: 260, damping: 28 }}
       onClick={onToggle}
-      className={`absolute top-0 left-0 right-0 cursor-pointer rounded-[24px] border ${borderColor} bg-[#0B0F14]/95 p-4 shadow-2xl backdrop-blur-2xl`}
+      className={`absolute top-0 left-0 right-0 cursor-pointer rounded-[24px] border ${borderColor} bg-[#0B0F14] p-4 shadow-2xl`}
       style={{ zIndex: stackSize - index }}
     >
       <div className="mb-2 flex items-center justify-between gap-2">

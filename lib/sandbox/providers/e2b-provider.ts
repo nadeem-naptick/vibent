@@ -7,19 +7,47 @@ export class E2BProvider extends SandboxProvider {
   private existingFiles: Set<string> = new Set();
 
   /**
-   * Attempt to reconnect to an existing E2B sandbox
+   * Reattach to an existing E2B sandbox by ID using Sandbox.connect.
+   * Called after Next.js dev HMR / restart wipes the in-memory
+   * sandboxManager Map but the sandbox itself is still running at E2B.
+   */
+  async attachToSandbox(sandboxId: string, url: string): Promise<SandboxInfo> {
+    this.sandbox = await Sandbox.connect(sandboxId, {
+      apiKey: this.config.e2b?.apiKey || process.env.E2B_API_KEY,
+    });
+    // Best-effort URL: if caller didn't pass one, derive from the new sandbox
+    // host. Most callers pass the URL from room.sandboxUrl which is the
+    // canonical source of truth.
+    let resolvedUrl = url;
+    if (!resolvedUrl) {
+      try {
+        const host = (this.sandbox as { getHost?: (p: number) => string }).getHost?.(
+          appConfig.e2b.vitePort,
+        );
+        if (host) resolvedUrl = `https://${host}`;
+      } catch {
+        // ignore
+      }
+    }
+    this.sandboxInfo = {
+      sandboxId,
+      url: resolvedUrl,
+      provider: 'e2b',
+      createdAt: new Date(),
+    };
+    return this.sandboxInfo;
+  }
+
+  /**
+   * Legacy hook still called by sandboxManager.getOrCreateProvider —
+   * delegates to attachToSandbox above.
    */
   async reconnect(sandboxId: string): Promise<boolean> {
     try {
-      
-      // Try to connect to existing sandbox
-      // Note: E2B SDK doesn't directly support reconnection, but we can try to recreate
-      // For now, return false to indicate reconnection isn't supported
-      // In the future, E2B may add this capability
-      
-      return false;
-    } catch (error) {
-      console.error(`[E2BProvider] Failed to reconnect to sandbox ${sandboxId}:`, error);
+      await this.attachToSandbox(sandboxId, '');
+      return true;
+    } catch (err) {
+      console.error(`[E2BProvider] Failed to reconnect to sandbox ${sandboxId}:`, err);
       return false;
     }
   }

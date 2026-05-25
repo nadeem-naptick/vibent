@@ -5,6 +5,28 @@ import { SandboxProvider, SandboxInfo, CommandResult } from '../types';
 export class VercelProvider extends SandboxProvider {
   private existingFiles: Set<string> = new Set();
 
+  // Reconnect to an existing sandbox by its ID — used after server restarts
+  // when the in-memory sandboxManager registration is lost but the sandbox
+  // itself is still alive at Vercel.
+  async attachToSandbox(sandboxId: string, url: string): Promise<SandboxInfo> {
+    const params: { sandboxId: string } & Record<string, string> = { sandboxId };
+    if (process.env.VERCEL_TOKEN && process.env.VERCEL_TEAM_ID && process.env.VERCEL_PROJECT_ID) {
+      params.teamId = process.env.VERCEL_TEAM_ID;
+      params.projectId = process.env.VERCEL_PROJECT_ID;
+      params.token = process.env.VERCEL_TOKEN;
+    } else if (process.env.VERCEL_OIDC_TOKEN) {
+      params.oidcToken = process.env.VERCEL_OIDC_TOKEN;
+    }
+    this.sandbox = await Sandbox.get(params as never);
+    this.sandboxInfo = {
+      sandboxId,
+      url,
+      provider: 'vercel',
+      createdAt: new Date(),
+    };
+    return this.sandboxInfo;
+  }
+
   async createSandbox(): Promise<SandboxInfo> {
     try {
       

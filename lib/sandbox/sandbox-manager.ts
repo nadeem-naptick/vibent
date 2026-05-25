@@ -160,13 +160,14 @@ class SandboxManager {
   }
 }
 
-// Export singleton instance
-export const sandboxManager = new SandboxManager();
-
-// Also maintain backward compatibility with global state
+// Singleton — pinned to globalThis so Next.js dev HMR / Turbopack module
+// reloads don't wipe the in-memory Map of active sandbox providers. Without
+// this, every code edit during development drops every running sandbox
+// handle and breaks task execution with reattach errors.
 declare global {
-  var sandboxManager: SandboxManager;
+  // eslint-disable-next-line no-var
+  var __sandboxManager: SandboxManager | undefined;
 }
 
-// Ensure the global reference points to our singleton
-global.sandboxManager = sandboxManager;
+export const sandboxManager: SandboxManager =
+  globalThis.__sandboxManager ?? (globalThis.__sandboxManager = new SandboxManager());

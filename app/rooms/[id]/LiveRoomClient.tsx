@@ -23,6 +23,7 @@ import { SideRail, type DrawerType } from './components/SideRail';
 import { Drawer } from './components/Drawer';
 import { Canvas } from './components/Canvas';
 import { BottomActionCluster } from './components/BottomActionCluster';
+import { DeviceToggle } from './components/DeviceToggle';
 import { OBJECTIVE_LABELS } from '@/lib/templates';
 import type { Room } from '@/lib/db/schema';
 
@@ -53,17 +54,15 @@ export function LiveRoomClient({
   const [sandboxUrl, setSandboxUrl] = useState(initialSandboxUrl);
   const [status, setStatus] = useState(initialStatus);
 
-  // If the room arrived in provisioning state with no sandboxUrl, the
-  // sandbox is either being created for the first time OR it died and we
-  // need to trigger restore. The restore endpoint is idempotent — safe to
-  // call multiple times.
+  // Always probe the sandbox on mount. The /restore endpoint is idempotent:
+  //   - if the sandbox is alive (alive check on sandboxManager): no-op
+  //   - if it's dead: flip room to 'provisioning' + start background restore
+  // The room's actual status only changes if the sandbox is genuinely dead.
   useEffect(() => {
-    if (status === 'provisioning' && !sandboxUrl) {
-      fetch(`/api/rooms/${roomId}/restore`, { method: 'POST' }).catch((err) => {
-        console.warn('[room] restore trigger failed:', err);
-      });
-    }
-  }, [roomId, status, sandboxUrl]);
+    fetch(`/api/rooms/${roomId}/restore`, { method: 'POST' }).catch((err) => {
+      console.warn('[room] restore trigger failed:', err);
+    });
+  }, [roomId]);
 
   // Poll while the sandbox is still provisioning.
   useEffect(() => {
@@ -191,6 +190,7 @@ function RoomShell({
       <TopBar roomTitle={room.title} roomSubtitle={subtitle} />
 
       <DecisionStack
+        roomId={roomId}
         pending={autoCompose.pending}
         pool={autoCompose.pool}
         threshold={autoCompose.threshold}
@@ -213,6 +213,11 @@ function RoomShell({
       />
 
       <ParticipantDock />
+
+      <DeviceToggle
+        value={settings.deviceFrame}
+        onChange={(f) => updateSettings({ deviceFrame: f })}
+      />
 
       <BottomActionCluster
         roomId={roomId}

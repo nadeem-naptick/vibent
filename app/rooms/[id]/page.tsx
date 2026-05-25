@@ -13,8 +13,7 @@ import {
 } from '@/lib/db/mongo';
 import { tasks } from '@/lib/db/schema';
 import { desc } from 'drizzle-orm';
-import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
-import { getLatestVersion, listVersions } from '@/lib/snapshots/manager';
+import { listVersions } from '@/lib/snapshots/manager';
 import { LiveRoomClient } from './LiveRoomClient';
 import type { RoomFeed } from './types';
 
@@ -57,31 +56,13 @@ export default async function RoomPage({
     participant = created;
   }
 
-  // Detect a dead sandbox WITHOUT blocking the page render. If the sandbox
-  // is gone (server restart or expired) we flip the room status to
-  // 'provisioning' synchronously and let the LiveRoomClient kick off the
-  // actual restore via POST /api/rooms/[id]/restore on mount. The iframe
-  // area shows "Provisioning workspace…" until the polling sees the room
-  // flip back to 'active' with a fresh sandboxUrl.
-  let liveRoom = room;
-  if (room.status === 'active' && room.sandboxId) {
-    const alive = sandboxManager.getProvider(room.sandboxId)?.isAlive();
-    if (!alive) {
-      const latest = await getLatestVersion(room.id);
-      if (latest) {
-        const [updated] = await db
-          .update(rooms)
-          .set({
-            status: 'provisioning',
-            sandboxUrl: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(rooms.id, room.id))
-          .returning();
-        liveRoom = updated;
-      }
-    }
-  }
+  // We used to synchronously mark the room as 'provisioning' here when the
+  // sandbox was dead — but that left rooms stuck in 'provisioning' across
+  // the dashboard for unrelated sessions if restore hung. Now the client
+  // always fires POST /api/rooms/[id]/restore on mount; that endpoint is
+  // idempotent (no-op if sandbox is alive) and is the ONLY thing that
+  // writes status='provisioning' to the DB.
+  const liveRoom = room;
 
   const token = await mintLiveKitToken({
     roomId: liveRoom.id,
