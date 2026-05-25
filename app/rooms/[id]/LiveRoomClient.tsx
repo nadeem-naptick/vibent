@@ -100,6 +100,10 @@ function InnerLayout({
   const { feed, updateIntent, addLocalTranscript, addLocalIntent, lastCompletedTaskId } =
     useRoomFeed(initialFeed, roomId);
 
+  // Used by rollback: bump iframe key explicitly so the preview reloads even
+  // if Vite's HMR doesn't pick up the rolled-back files immediately.
+  const [extraNonce, setExtraNonce] = useState(0);
+
   useBrowserSTT({
     roomId,
     speakerName,
@@ -129,7 +133,7 @@ function InnerLayout({
         <div className="flex-1 bg-white">
           {sandboxUrl ? (
             <iframe
-              key={`${sandboxUrl}#${iframeNonce}`}
+              key={`${sandboxUrl}#${iframeNonce}#${extraNonce}`}
               src={sandboxUrl}
               className="w-full h-full border-0"
               title="Room artifact preview"
@@ -152,8 +156,10 @@ function InnerLayout({
           transcripts={feed.transcripts}
           intents={feed.intents}
           tasks={feed.tasks}
+          versions={feed.versions}
           isHost={isHost}
           onUpdateIntent={updateIntent}
+          onRolledBack={() => setExtraNonce((n) => n + 1)}
         />
       </section>
     </div>

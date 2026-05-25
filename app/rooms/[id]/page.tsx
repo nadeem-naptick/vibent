@@ -13,6 +13,9 @@ import {
 } from '@/lib/db/mongo';
 import { tasks } from '@/lib/db/schema';
 import { desc } from 'drizzle-orm';
+import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
+import { getLatestVersion, listVersions } from '@/lib/snapshots/manager';
+import { restoreRoomSandbox } from '@/lib/sandbox/room-sandbox';
 import { LiveRoomClient } from './LiveRoomClient';
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import type { RoomFeed } from './types';
@@ -56,8 +59,31 @@ export default async function RoomPage({
     participant = created;
   }
 
+  // Auto-restore the sandbox if it's no longer alive (server restart or
+  // sandbox provider timeout). Uses the latest version snapshot.
+  let liveRoom = room;
+  if (room.status === 'active' && room.sandboxId) {
+    const alive = sandboxManager.getProvider(room.sandboxId)?.isAlive();
+    if (!alive) {
+      const latest = await getLatestVersion(room.id);
+      if (latest) {
+        try {
+          const fresh = await restoreRoomSandbox(room.id, latest);
+          const [updated] = await db
+            .update(rooms)
+            .set({ sandboxId: fresh.sandboxId, sandboxUrl: fresh.url, updatedAt: new Date() })
+            .where(eq(rooms.id, room.id))
+            .returning();
+          liveRoom = updated;
+        } catch (err) {
+          console.error('[room] auto-restore failed:', err);
+        }
+      }
+    }
+  }
+
   const token = await mintLiveKitToken({
-    roomId: room.id,
+    roomId: liveRoom.id,
     identity: participant.livekitIdentity,
     name: participant.displayName,
     role: participant.role as 'host' | 'collaborator' | 'viewer',
@@ -66,24 +92,26 @@ export default async function RoomPage({
   // Load existing transcripts + intents + tasks so the AI panel renders on
   // first paint for late joiners.
   await ensureIndexes();
-  const [transcriptDocs, intentDocs, taskRows] = await Promise.all([
+  const [transcriptDocs, intentDocs, taskRows, versionRows] = await Promise.all([
     getTranscriptsCollection().then((c) =>
-      c.find({ roomId: room.id }).sort({ createdAt: 1 }).limit(200).toArray(),
+      c.find({ roomId: liveRoom.id }).sort({ createdAt: 1 }).limit(200).toArray(),
     ),
     getIntentsCollection().then((c) =>
-      c.find({ roomId: room.id }).sort({ createdAt: -1 }).limit(100).toArray(),
+      c.find({ roomId: liveRoom.id }).sort({ createdAt: -1 }).limit(100).toArray(),
     ),
     db
       .select()
       .from(tasks)
-      .where(eq(tasks.roomId, room.id))
+      .where(eq(tasks.roomId, liveRoom.id))
       .orderBy(desc(tasks.createdAt))
       .limit(20),
+    listVersions(liveRoom.id),
   ]);
   const initialFeed: RoomFeed = {
     transcripts: JSON.parse(JSON.stringify(transcriptDocs)),
     intents: JSON.parse(JSON.stringify(intentDocs)),
     tasks: JSON.parse(JSON.stringify(taskRows)),
+    versions: JSON.parse(JSON.stringify(versionRows)),
   };
 
   return (
@@ -97,10 +125,10 @@ export default async function RoomPage({
             ← Dashboard
           </Link>
           <div className="min-w-0">
-            <div className="font-medium truncate">{room.title}</div>
+            <div className="font-medium truncate">{liveRoom.title}</div>
             <div className="text-xs text-neutral-500">
-              {OBJECTIVE_LABELS[room.objective]} ·{' '}
-              <RoomStatus status={room.status} />
+              {OBJECTIVE_LABELS[liveRoom.objective]} ·{' '}
+              <RoomStatus status={liveRoom.status} />
             </div>
           </div>
         </div>
@@ -113,11 +141,11 @@ export default async function RoomPage({
       </header>
 
       <LiveRoomClient
-        roomId={room.id}
+        roomId={liveRoom.id}
         token={token}
         serverUrl={publicLiveKitUrl}
-        sandboxUrl={room.sandboxUrl}
-        status={room.status}
+        sandboxUrl={liveRoom.sandboxUrl}
+        status={liveRoom.status}
         isHost={participant.role === 'host'}
         speakerName={participant.displayName}
         initialFeed={initialFeed}

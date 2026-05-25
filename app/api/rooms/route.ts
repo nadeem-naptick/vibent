@@ -66,7 +66,8 @@ export async function POST(req: Request) {
 
   // 3. Spin up sandbox in the background — don't block the response.
   // The Live Room page polls the room until status === 'active'.
-  provisionRoomSandbox()
+  // Captures v0 snapshot once the Vite template is up.
+  provisionRoomSandbox(room.id)
     .then(async ({ sandboxId, url }) => {
       await db
         .update(rooms)

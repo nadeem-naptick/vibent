@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useReducer } from 'react';
 import { useDataChannel } from '@livekit/components-react';
-import { FEED_TOPIC, type FeedMessage, type LiveTask, type RoomFeed } from './types';
+import { FEED_TOPIC, type FeedMessage, type LiveTask, type LiveVersion, type RoomFeed } from './types';
 import type { DetectedIntent, TranscriptSegment } from '@/lib/db/mongo';
 
 type State = {
   transcripts: TranscriptSegment[];
   intents: DetectedIntent[];
   tasks: LiveTask[];
+  versions: LiveVersion[];
 };
 
 type Action =
@@ -19,7 +20,8 @@ type Action =
   | { type: 'task_complete'; payload: Extract<FeedMessage, { kind: 'task_complete' }>['payload'] }
   | { type: 'task_failed'; payload: Extract<FeedMessage, { kind: 'task_failed' }>['payload'] }
   | { type: 'replace_feed'; payload: { transcripts: TranscriptSegment[]; intents: DetectedIntent[] } }
-  | { type: 'replace_tasks'; payload: LiveTask[] };
+  | { type: 'replace_tasks'; payload: LiveTask[] }
+  | { type: 'replace_versions'; payload: LiveVersion[] };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -91,6 +93,8 @@ function reducer(state: State, action: Action): State {
       };
     case 'replace_tasks':
       return { ...state, tasks: action.payload };
+    case 'replace_versions':
+      return { ...state, versions: action.payload };
   }
 }
 
@@ -104,6 +108,7 @@ export function useRoomFeed(initial: RoomFeed, roomId: string) {
     transcripts: initial.transcripts,
     intents: initial.intents,
     tasks: initial.tasks ?? [],
+    versions: initial.versions ?? [],
   });
 
   // Subscribe to data channel messages — from other participants AND from
@@ -173,11 +178,17 @@ export function useRoomFeed(initial: RoomFeed, roomId: string) {
     const intervalMs = hasActive ? 1_000 : 5_000;
     const tick = async () => {
       try {
-        const res = await fetch(`/api/rooms/${roomId}/tasks`);
-        if (!res.ok) return;
-        const { tasks } = (await res.json()) as { tasks: LiveTask[] };
-        if (!cancelled) {
+        const [tasksRes, versionsRes] = await Promise.all([
+          fetch(`/api/rooms/${roomId}/tasks`),
+          fetch(`/api/rooms/${roomId}/versions`),
+        ]);
+        if (!cancelled && tasksRes.ok) {
+          const { tasks } = (await tasksRes.json()) as { tasks: LiveTask[] };
           dispatch({ type: 'replace_tasks', payload: tasks });
+        }
+        if (!cancelled && versionsRes.ok) {
+          const { versions } = (await versionsRes.json()) as { versions: LiveVersion[] };
+          dispatch({ type: 'replace_versions', payload: versions });
         }
       } catch {
         // ignore

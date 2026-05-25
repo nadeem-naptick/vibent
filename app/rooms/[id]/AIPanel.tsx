@@ -2,15 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { DetectedIntent, IntentType, TranscriptSegment } from '@/lib/db/mongo';
-import type { LiveTask } from './types';
+import type { LiveTask, LiveVersion } from './types';
 import { ComposeDecisionModal } from './ComposeDecisionModal';
+import { VersionsTab } from './VersionsTab';
 
-type Tab = 'transcript' | 'detected' | 'tasks' | 'open';
+type Tab = 'transcript' | 'detected' | 'tasks' | 'versions' | 'open';
 
 const TAB_LABELS: Record<Tab, string> = {
   transcript: 'Transcript',
   detected: 'Detected',
   tasks: 'Tasks',
+  versions: 'Versions',
   open: 'Open',
 };
 
@@ -19,8 +21,10 @@ type Props = {
   transcripts: TranscriptSegment[];
   intents: DetectedIntent[];
   tasks: LiveTask[];
+  versions: LiveVersion[];
   isHost: boolean;
   onUpdateIntent: (intentId: string, patch: { status: DetectedIntent['status'] }) => void;
+  onRolledBack: () => void;
 };
 
 export function AIPanel({
@@ -28,8 +32,10 @@ export function AIPanel({
   transcripts,
   intents,
   tasks,
+  versions,
   isHost,
   onUpdateIntent,
+  onRolledBack,
 }: Props) {
   const [tab, setTab] = useState<Tab>('detected');
 
@@ -84,7 +90,7 @@ export function AIPanel({
       <div className="border-b border-neutral-900">
         <nav className="flex">
           {(Object.keys(TAB_LABELS) as Tab[]).map((t) => {
-            const count = tabCount(t, transcripts, grouped, tasks);
+            const count = tabCount(t, transcripts, grouped, tasks, versions);
             return (
               <button
                 key={t}
@@ -117,6 +123,14 @@ export function AIPanel({
           />
         )}
         {tab === 'tasks' && <TaskList tasks={tasks} />}
+        {tab === 'versions' && (
+          <VersionsTab
+            roomId={roomId}
+            versions={versions}
+            isHost={isHost}
+            onRolledBack={onRolledBack}
+          />
+        )}
         {tab === 'open' && (
           <IntentList
             intents={grouped.openQuestions}
@@ -479,6 +493,7 @@ function tabCount(
   transcripts: TranscriptSegment[],
   grouped: Grouped,
   tasks: LiveTask[],
+  versions: LiveVersion[],
 ) {
   switch (tab) {
     case 'transcript':
@@ -487,6 +502,8 @@ function tabCount(
       return grouped.active.length || null;
     case 'tasks':
       return tasks.length || null;
+    case 'versions':
+      return versions.length || null;
     case 'open':
       return grouped.openQuestions.length || null;
   }

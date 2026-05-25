@@ -16,10 +16,22 @@ export type LiveTask = {
   completedAt?: string | null;
 };
 
+export type LiveVersion = {
+  id: string;
+  versionNumber: number;
+  taskId: string | null;
+  rolledBackFromVersionId?: string | null;
+  summary: string;
+  fileCount: number;
+  totalBytes: number;
+  createdAt: string;
+};
+
 export type RoomFeed = {
   transcripts: TranscriptSegment[];
   intents: DetectedIntent[];
   tasks?: LiveTask[];
+  versions?: LiveVersion[];
 };
 
 // Data channel message envelope. Single topic, discriminated by `kind`.

@@ -6,6 +6,7 @@ import {
   primaryKey,
   jsonb,
   pgEnum,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { nanoid } from 'nanoid';
 import type { AdapterAccountType } from 'next-auth/adapters';
@@ -200,3 +201,30 @@ export type Participant = typeof participants.$inferSelect;
 export type NewParticipant = typeof participants.$inferInsert;
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Versions — point-in-time snapshots of the sandbox project files
+// ---------------------------------------------------------------------------
+
+export const versions = pgTable('versions', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => nanoid()),
+  roomId: text('room_id')
+    .notNull()
+    .references(() => rooms.id, { onDelete: 'cascade' }),
+  // Per-room sequential number — v0 is the initial template snapshot.
+  versionNumber: integer('version_number').notNull(),
+  // Source task that produced this version. NULL for v0 and for rollbacks.
+  taskId: text('task_id'),
+  // For rollbacks: which version this one was rolled back FROM.
+  rolledBackFromVersionId: text('rolled_back_from_version_id'),
+  summary: text('summary').notNull(),
+  snapshotPath: text('snapshot_path').notNull(),
+  fileCount: integer('file_count').notNull().default(0),
+  totalBytes: integer('total_bytes').notNull().default(0),
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+});
+
+export type Version = typeof versions.$inferSelect;
+export type NewVersion = typeof versions.$inferInsert;

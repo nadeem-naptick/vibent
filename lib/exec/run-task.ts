@@ -8,6 +8,7 @@ import { db } from '@/lib/db';
 import { rooms, tasks, type TaskEvent } from '@/lib/db/schema';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
 import { createSandboxTools } from './sandbox-tools';
+import { createVersion } from '@/lib/snapshots/manager';
 import { OBJECTIVE_LABELS, OUTPUT_TYPE_LABELS } from '@/lib/templates';
 
 // ---------------------------------------------------------------------------
@@ -193,6 +194,21 @@ export async function runTask(taskId: string): Promise<void> {
         events,
       })
       .where(eq(tasks.id, task.id));
+
+    // Snapshot the sandbox so this completed task becomes a rollback target.
+    // Don't fail the task on snapshot error — the change already shipped to
+    // the iframe; users just lose rollback for this particular step.
+    try {
+      await createVersion({
+        roomId: room.id,
+        sandbox,
+        summary:
+          (result.text && result.text.trim().slice(0, 200)) || task.instruction.slice(0, 200),
+        taskId: task.id,
+      });
+    } catch (snapErr) {
+      console.warn('[run-task] post-task snapshot failed:', snapErr);
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await db
