@@ -53,7 +53,7 @@ export function BottomActionCluster({
   }
 
   return (
-    <div className="absolute bottom-6 right-6 z-30 flex items-center gap-3">
+    <div className="absolute bottom-6 right-6 z-30 flex items-center gap-5">
       {/* Settings popover */}
       <div className="relative" ref={popoverRef}>
         <PillButton

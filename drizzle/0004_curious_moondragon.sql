@@ -1,0 +1,1 @@
+ALTER TABLE "tasks" ADD COLUMN "thinking_mode" integer DEFAULT 1 NOT NULL;

@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { DrawerType } from './TopCenterRail';
 import type { LiveTask, LiveVersion } from '../types';
 import type { DetectedIntent, TranscriptSegment } from '@/lib/db/mongo';
@@ -48,38 +49,41 @@ export function Drawer({
   isHost,
   onRolledBack,
 }: Props) {
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {type && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="absolute inset-0 z-40 bg-black/30 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-6"
           onClick={onClose}
         >
           <motion.div
-            initial={{ y: 80, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 80, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+            initial={{ y: 24, opacity: 0, scale: 0.97 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 24, opacity: 0, scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 280, damping: 28 }}
             onClick={(e) => e.stopPropagation()}
-            className="absolute bottom-5 left-5 right-5 max-h-[78vh] flex flex-col rounded-[36px] border border-white/12 bg-[#0B0F14]/94 p-5 shadow-2xl backdrop-blur-2xl"
+            className="w-[min(760px,calc(100vw-40px))] max-h-[80vh] flex flex-col rounded-[28px] border border-white/12 bg-[#0B0F14] shadow-2xl"
           >
-            <div className="mb-5 flex items-center justify-between gap-4">
-              <div>
+            <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-white/8">
+              <div className="min-w-0">
                 <div className="text-lg font-semibold text-white">{TITLES[type]}</div>
-                <div className="text-sm text-white/42">{SUBTITLES[type]}</div>
+                <div className="text-sm text-white/45 truncate">{SUBTITLES[type]}</div>
               </div>
               <button
                 onClick={onClose}
-                className="grid h-10 w-10 place-items-center rounded-2xl bg-white/8 text-white/65 hover:bg-white/12"
+                title="Close"
+                className="grid h-9 w-9 place-items-center rounded-full bg-white/8 text-white/65 hover:bg-white/15 hover:text-white shrink-0"
               >
-                <ChevronDown size={18} />
+                <X size={16} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto -mx-1 px-1">
+            <div className="flex-1 overflow-y-auto px-2 py-1">
               {type === 'transcript' && <TranscriptContent transcripts={transcripts} />}
               {type === 'tasks' && <TasksContent tasks={tasks} />}
               {type === 'versions' && (
@@ -95,7 +99,8 @@ export function Drawer({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
 
@@ -108,18 +113,35 @@ function TranscriptContent({ transcripts }: { transcripts: TranscriptSegment[] }
     return <Empty>Transcript will appear here as participants speak.</Empty>;
   }
   return (
-    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-      {transcripts.map((s) => (
-        <div
+    <ul>
+      {transcripts.map((s, i) => (
+        <li
           key={s.id}
-          className="rounded-[26px] border border-white/10 bg-white/[0.045] p-4"
+          className={`flex items-start gap-4 px-4 py-3 rounded-lg ${
+            i % 2 === 0 ? 'bg-white/[0.025]' : ''
+          } hover:bg-white/[0.05] transition-colors`}
         >
-          <div className="mb-2 text-sm font-semibold text-blue-200">{s.speakerName}</div>
-          <p className="text-sm leading-relaxed text-white/55">{s.text}</p>
-        </div>
+          <div className="w-32 shrink-0">
+            <div className="text-sm font-semibold text-blue-200">{s.speakerName}</div>
+            <div className="text-[11px] text-white/40 tabular-nums mt-0.5">
+              {formatTimeOfDay(s.createdAt)}
+            </div>
+          </div>
+          <div className="flex-1 text-sm text-white/80 leading-relaxed">{s.text}</div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
+}
+
+function formatTimeOfDay(d: Date | string): string {
+  const date = typeof d === 'string' ? new Date(d) : d;
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
 }
 
 function TasksContent({ tasks }: { tasks: LiveTask[] }) {
@@ -127,35 +149,49 @@ function TasksContent({ tasks }: { tasks: LiveTask[] }) {
     return <Empty>Compose a decision and tasks appear here.</Empty>;
   }
   return (
-    <div className="grid gap-3 md:grid-cols-2">
-      {tasks.map((t) => (
-        <div key={t.id} className="rounded-[26px] border border-white/10 bg-white/[0.045] p-4">
-          <div className="mb-2 flex items-center justify-between gap-2">
+    <ul>
+      {tasks.map((t, i) => (
+        <li
+          key={t.id}
+          className={`flex items-start gap-4 px-4 py-3 rounded-lg ${
+            i % 2 === 0 ? 'bg-white/[0.025]' : ''
+          } hover:bg-white/[0.05] transition-colors`}
+        >
+          <div className="w-28 shrink-0">
             <span
-              className={`rounded-full px-2 py-0.5 text-[11px] capitalize ${
+              className={`inline-block rounded-full px-2 py-0.5 text-[11px] capitalize ${
                 t.status === 'complete'
-                  ? 'bg-emerald-500/10 text-emerald-200'
+                  ? 'bg-emerald-500/15 text-emerald-200'
                   : t.status === 'running'
-                  ? 'bg-blue-500/10 text-blue-200 animate-pulse'
+                  ? 'bg-blue-500/15 text-blue-200 animate-pulse'
                   : t.status === 'failed'
-                  ? 'bg-red-500/10 text-red-200'
-                  : 'bg-white/5 text-white/55'
+                  ? 'bg-red-500/15 text-red-200'
+                  : t.status === 'cancelled'
+                  ? 'bg-white/10 text-white/55'
+                  : 'bg-white/10 text-white/65'
               }`}
             >
               {t.status === 'running' ? 'running…' : t.status}
             </span>
-            <span className="text-[11px] text-white/30">{t.model?.split('/').pop()}</span>
+            <div className="text-[11px] text-white/40 tabular-nums mt-1">
+              {formatTimeOfDay(t.createdAt)}
+            </div>
           </div>
-          <p className="text-sm font-medium text-white leading-snug">{t.instruction}</p>
-          {t.summary && (
-            <p className="mt-2 text-xs text-white/45 italic leading-relaxed">{t.summary}</p>
-          )}
-          {t.error && (
-            <p className="mt-2 text-xs text-red-300 font-mono leading-snug">{t.error}</p>
-          )}
-        </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-white leading-snug">{t.instruction}</p>
+            {t.summary && (
+              <p className="mt-1.5 text-xs text-white/55 italic leading-relaxed">{t.summary}</p>
+            )}
+            {t.error && (
+              <p className="mt-1.5 text-xs text-red-300/80 font-mono leading-snug">{t.error}</p>
+            )}
+          </div>
+          <span className="text-[10px] text-white/30 shrink-0 mt-1">
+            {t.model?.split('/').pop()}
+          </span>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -233,80 +269,91 @@ function VersionsContent({
           {error}
         </div>
       )}
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {versions.map((v) => {
+      <ul>
+        {versions.map((v, i) => {
           const isCurrent = v.id === current.id;
           const isV0 = v.versionNumber === 0;
           const diffOpen = diffOpenId === v.id;
           const diffState = diffs[v.id];
           return (
-            <div
+            <li
               key={v.id}
-              className={`rounded-[26px] border p-4 ${
+              className={`px-4 py-3 rounded-lg transition-colors ${
                 isCurrent
-                  ? 'border-blue-400/25 bg-blue-500/10'
-                  : 'border-white/10 bg-white/[0.045]'
+                  ? 'bg-blue-500/[0.08] border border-blue-400/15'
+                  : i % 2 === 0
+                  ? 'bg-white/[0.025] hover:bg-white/[0.05]'
+                  : 'hover:bg-white/[0.05]'
               }`}
             >
-              <div className="mb-2 flex items-center justify-between">
-                <div className="text-xl font-semibold text-white">v{v.versionNumber}</div>
-                <div className="text-xs text-white/38">{timeAgo(v.createdAt)}</div>
-              </div>
-              <div className="text-sm text-white/65 line-clamp-3 leading-snug min-h-[3em]">{v.summary}</div>
-              <div className="mt-2 text-[10px] text-white/30">
-                {v.fileCount} files · {humanBytes(v.totalBytes)}
-              </div>
+              <div className="flex items-start gap-4">
+                <div className="w-24 shrink-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base font-semibold text-white">v{v.versionNumber}</span>
+                    {isCurrent && (
+                      <span className="text-[10px] uppercase tracking-wider text-blue-200">
+                        current
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-white/35 tabular-nums mt-0.5">
+                    {timeAgo(v.createdAt)}
+                  </div>
+                  <div className="text-[10px] text-white/25 mt-1">
+                    {v.fileCount} files · {humanBytes(v.totalBytes)}
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-white/85 leading-snug">{v.summary}</div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                {!isV0 && (
-                  <button
-                    onClick={() => toggleDiff(v.id)}
-                    className="rounded-xl border border-white/10 px-3 py-1.5 text-xs text-white/65 hover:text-white hover:bg-white/5"
-                  >
-                    {diffOpen ? 'Hide diff' : 'View diff'}
-                  </button>
-                )}
-                {!isCurrent && isHost && (
-                  <button
-                    onClick={() => rollback(v.id, `v${v.versionNumber}`)}
-                    disabled={rollingBack === v.id}
-                    className="flex-1 rounded-xl border border-blue-400/30 bg-blue-500/15 px-3 py-1.5 text-xs text-blue-100 hover:bg-blue-500/25 disabled:opacity-50"
-                  >
-                    {rollingBack === v.id ? 'Rolling back…' : 'Rollback'}
-                  </button>
-                )}
-                {isCurrent && (
-                  <span className="flex-1 text-center text-xs text-blue-200 py-1.5">Current</span>
-                )}
-              </div>
-
-              {diffOpen && (
-                <div className="mt-3 border-t border-white/8 pt-3">
-                  {diffState === 'loading' && (
-                    <div className="text-xs text-white/45">Loading diff…</div>
-                  )}
-                  {diffState === 'error' && (
-                    <div className="text-xs text-red-300">Could not load diff.</div>
-                  )}
-                  {Array.isArray(diffState) && diffState.length === 0 && (
-                    <div className="text-xs text-white/45">No file changes.</div>
-                  )}
-                  {Array.isArray(diffState) && diffState.length > 0 && (
-                    <ul className="space-y-1 max-h-48 overflow-y-auto">
-                      {diffState.map((d) => (
-                        <li key={d.path} className="text-xs flex items-start gap-2 font-mono">
-                          <DiffKind kind={d.kind} />
-                          <span className="text-white/70 truncate flex-1">{d.path}</span>
-                        </li>
-                      ))}
-                    </ul>
+                  {diffOpen && (
+                    <div className="mt-3 border-t border-white/8 pt-3">
+                      {diffState === 'loading' && (
+                        <div className="text-xs text-white/45">Loading diff…</div>
+                      )}
+                      {diffState === 'error' && (
+                        <div className="text-xs text-red-300">Could not load diff.</div>
+                      )}
+                      {Array.isArray(diffState) && diffState.length === 0 && (
+                        <div className="text-xs text-white/45">No file changes.</div>
+                      )}
+                      {Array.isArray(diffState) && diffState.length > 0 && (
+                        <ul className="space-y-1 max-h-48 overflow-y-auto">
+                          {diffState.map((d) => (
+                            <li key={d.path} className="text-xs flex items-start gap-2 font-mono">
+                              <DiffKind kind={d.kind} />
+                              <span className="text-white/70 truncate flex-1">{d.path}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {!isV0 && (
+                    <button
+                      onClick={() => toggleDiff(v.id)}
+                      className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/65 hover:text-white hover:bg-white/5"
+                    >
+                      {diffOpen ? 'Hide diff' : 'Diff'}
+                    </button>
+                  )}
+                  {!isCurrent && isHost && (
+                    <button
+                      onClick={() => rollback(v.id, `v${v.versionNumber}`)}
+                      disabled={rollingBack === v.id}
+                      className="rounded-lg border border-blue-400/30 bg-blue-500/15 px-3 py-1.5 text-xs text-blue-100 hover:bg-blue-500/25 disabled:opacity-50"
+                    >
+                      {rollingBack === v.id ? 'Rolling back…' : 'Rollback'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </li>
           );
         })}
-      </div>
+      </ul>
     </div>
   );
 }

@@ -11,10 +11,14 @@ import {
   MonitorUp,
   Users,
   Radio,
+  Monitor,
+  Smartphone,
 } from 'lucide-react';
+import type { DeviceFrame } from '../useSettings';
 import {
   useLocalParticipant,
   useParticipants,
+  useTrackToggle,
   useTracks,
   VideoTrack,
 } from '@livekit/components-react';
@@ -34,9 +38,11 @@ const GRADIENTS = [
 
 type Props = {
   onEndCall: () => void;
+  deviceFrame: DeviceFrame;
+  onChangeDeviceFrame: (next: DeviceFrame) => void;
 };
 
-export function ParticipantDock({ onEndCall }: Props) {
+export function ParticipantDock({ onEndCall, deviceFrame, onChangeDeviceFrame }: Props) {
   const participants = useParticipants();
 
   return (
@@ -59,7 +65,12 @@ export function ParticipantDock({ onEndCall }: Props) {
 
       {/* Toolbar — people count, mic, cam, share, end call */}
       <div className="pointer-events-auto">
-        <ParticipantToolbar onEndCall={onEndCall} participantCount={participants.length} />
+        <ParticipantToolbar
+          onEndCall={onEndCall}
+          participantCount={participants.length}
+          deviceFrame={deviceFrame}
+          onChangeDeviceFrame={onChangeDeviceFrame}
+        />
       </div>
     </div>
   );
@@ -68,41 +79,25 @@ export function ParticipantDock({ onEndCall }: Props) {
 function ParticipantToolbar({
   onEndCall,
   participantCount,
+  deviceFrame,
+  onChangeDeviceFrame,
 }: {
   onEndCall: () => void;
   participantCount: number;
+  deviceFrame: DeviceFrame;
+  onChangeDeviceFrame: (next: DeviceFrame) => void;
 }) {
   const { localParticipant } = useLocalParticipant();
-  const [mic, setMic] = useState(true);
-  const [camera, setCamera] = useState(true);
-
-  useEffect(() => {
-    if (!localParticipant) return;
-    setMic(localParticipant.isMicrophoneEnabled);
-    setCamera(localParticipant.isCameraEnabled);
-  }, [localParticipant]);
-
-  async function toggleMic() {
-    if (!localParticipant) return;
-    const next = !mic;
-    setMic(next);
-    try {
-      await localParticipant.setMicrophoneEnabled(next);
-    } catch {
-      setMic(!next);
-    }
-  }
-
-  async function toggleCamera() {
-    if (!localParticipant) return;
-    const next = !camera;
-    setCamera(next);
-    try {
-      await localParticipant.setCameraEnabled(next);
-    } catch {
-      setCamera(!next);
-    }
-  }
+  // useTrackToggle subscribes to the underlying ParticipantEvent.Track* events
+  // so the `enabled` flag stays in sync with the actual track state — unlike
+  // a snapshot pulled into useState, which goes stale when LiveKit publishes
+  // tracks asynchronously after first render.
+  const { enabled: mic, toggle: toggleMic } = useTrackToggle({
+    source: Track.Source.Microphone,
+  });
+  const { enabled: camera, toggle: toggleCamera } = useTrackToggle({
+    source: Track.Source.Camera,
+  });
 
   async function toggleScreenShare() {
     if (!localParticipant) return;
@@ -114,7 +109,7 @@ function ParticipantToolbar({
   }
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-5">
       <PillButton
         icon={Users}
         title={`${participantCount} ${participantCount === 1 ? 'person' : 'people'}`}
@@ -123,22 +118,26 @@ function ParticipantToolbar({
       <PillButton
         icon={mic ? Mic : MicOff}
         title={mic ? 'Mute mic' : 'Unmute mic'}
-        onClick={toggleMic}
+        onClick={() => toggleMic()}
         variant={mic ? 'default' : 'danger'}
       />
       <PillButton
         icon={camera ? Video : VideoOff}
         title={camera ? 'Stop camera' : 'Start camera'}
-        onClick={toggleCamera}
+        onClick={() => toggleCamera()}
         variant={camera ? 'default' : 'danger'}
       />
       <PillButton icon={MonitorUp} title="Share screen" onClick={toggleScreenShare} />
       <PillButton
-        icon={PhoneOff}
-        title="Leave room"
-        onClick={onEndCall}
-        variant="danger"
+        icon={deviceFrame === 'mobile' ? Smartphone : Monitor}
+        title={
+          deviceFrame === 'mobile'
+            ? 'Mobile preview — click to switch to desktop'
+            : 'Desktop preview — click to switch to mobile'
+        }
+        onClick={() => onChangeDeviceFrame(deviceFrame === 'mobile' ? 'desktop' : 'mobile')}
       />
+      <PillButton icon={PhoneOff} title="Leave room" onClick={onEndCall} variant="danger" />
     </div>
   );
 }

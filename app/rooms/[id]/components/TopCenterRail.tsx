@@ -1,12 +1,6 @@
 'use client';
 
-import {
-  Check,
-  GitBranch,
-  Layers3,
-  MessageSquareText,
-  type LucideIcon,
-} from 'lucide-react';
+import { Check, GitBranch, MessageSquareText, type LucideIcon } from 'lucide-react';
 import { PillButton } from './PillButton';
 
 export type DrawerType = 'transcript' | 'tasks' | 'versions' | 'context';
@@ -23,16 +17,14 @@ export function TopCenterRail({ badges, onOpen }: Props) {
     { icon: MessageSquareText, label: 'Transcript', key: 'transcript', badge: badges.transcript || null },
     { icon: Check, label: 'Active tasks', key: 'tasks', badge: badges.tasks || null },
     { icon: GitBranch, label: 'Versions', key: 'versions', badge: badges.versions || null },
-    { icon: Layers3, label: 'Context', key: 'context' },
   ];
 
   return (
-    <div className="absolute left-1/2 top-5 z-30 -translate-x-1/2 flex items-center gap-3">
+    <div className="absolute left-1/2 top-5 z-30 -translate-x-1/2 flex items-center gap-5">
       {items.map(({ icon: Icon, label, key, badge }) => (
         <PillButton
           key={key}
           icon={Icon}
-          label={label}
           title={label}
           onClick={() => onOpen(key)}
           badge={badge}

@@ -6,11 +6,12 @@ import { toast } from 'sonner';
 
 type Props = {
   roomId: string;
+  thinkingMode: boolean;
   onClose: () => void;
   onSubmitted: () => void;
 };
 
-export function DraftDecisionModal({ roomId, onClose, onSubmitted }: Props) {
+export function DraftDecisionModal({ roomId, thinkingMode, onClose, onSubmitted }: Props) {
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
@@ -45,6 +46,7 @@ export function DraftDecisionModal({ roomId, onClose, onSubmitted }: Props) {
           roomId,
           intentIds: [],
           instruction,
+          thinkingMode,
         }),
       });
       console.log('[draft-decision] response status:', res.status);

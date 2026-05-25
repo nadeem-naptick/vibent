@@ -45,27 +45,22 @@ export function useBrowserSTT({
   // and reconnect (used when Deepgram closes us for inactivity).
   const [restartKey, setRestartKey] = useState(0);
 
-  // Mirror LiveKit's mute state. We pause/resume the MediaRecorder when this
-  // flips so muting also stops Deepgram from billing audio + classifying
-  // utterances. The WebSocket stays open via keepalive frames.
+  // Mirror LiveKit's mute state. setMicrophoneEnabled(false) republishes
+  // the audio track rather than muting, so the trackMuted/trackUnmuted
+  // events I was using don't reliably fire. Poll the live participant
+  // state instead — cheap and 100% accurate.
   const [micEnabled, setMicEnabled] = useState(true);
+  const micEnabledRef = useRef(true);
   useEffect(() => {
     if (!localParticipant) return;
     setMicEnabled(localParticipant.isMicrophoneEnabled);
-    const handler = () => setMicEnabled(localParticipant.isMicrophoneEnabled);
-    // Cast through unknown — LiveKit's `on` is typed via the strict
-    // ParticipantEvent enum, but the string-literal call signature also
-    // works at runtime and avoids importing the enum just for this.
-    const lp = localParticipant as unknown as {
-      on(ev: string, cb: () => void): void;
-      off(ev: string, cb: () => void): void;
-    };
-    lp.on('trackMuted', handler);
-    lp.on('trackUnmuted', handler);
-    return () => {
-      lp.off('trackMuted', handler);
-      lp.off('trackUnmuted', handler);
-    };
+    micEnabledRef.current = localParticipant.isMicrophoneEnabled;
+    const i = setInterval(() => {
+      const cur = localParticipant.isMicrophoneEnabled;
+      micEnabledRef.current = cur;
+      setMicEnabled((prev) => (prev === cur ? prev : cur));
+    }, 300);
+    return () => clearInterval(i);
   }, [localParticipant]);
 
   useEffect(() => {
@@ -74,14 +69,14 @@ export function useBrowserSTT({
     if (!micEnabled && recorder.state === 'recording') {
       try {
         recorder.pause();
-        console.log('[stt] mic muted — paused recorder (Deepgram WS stays alive via keepalive)');
+        console.log('[stt] mic muted → recorder paused, Deepgram WS kept alive via keepalive');
       } catch (err) {
         console.warn('[stt] pause failed:', err);
       }
     } else if (micEnabled && recorder.state === 'paused') {
       try {
         recorder.resume();
-        console.log('[stt] mic unmuted — resumed recorder');
+        console.log('[stt] mic unmuted → recorder resumed');
       } catch (err) {
         console.warn('[stt] resume failed:', err);
       }
@@ -153,18 +148,45 @@ export function useBrowserSTT({
         startedAtRef.current = Date.now();
 
         let chunkCount = 0;
+        let blockedLogShown = false;
         recorder.addEventListener('dataavailable', (e) => {
-          if (e.data.size > 0 && connection.getReadyState() === 1) {
-            connection.send(e.data);
-            lastSentAtRef.current = Date.now();
-            chunkCount += 1;
-            if (chunkCount === 1 || chunkCount % 20 === 0) {
-              console.log(`[stt] sent ${chunkCount} chunks to Deepgram (last: ${e.data.size}B)`);
+          if (e.data.size <= 0) return;
+          if (connection.getReadyState() !== 1) return;
+          // Read LIVE state from LiveKit, not a useRef snapshot — eliminates
+          // race conditions on fresh mount where the ref may not have synced
+          // yet before the first audio chunk arrives.
+          const live = localParticipant?.isMicrophoneEnabled ?? true;
+          if (!live) {
+            if (!blockedLogShown) {
+              console.log('[stt] blocked: mic is muted (LiveKit live state)');
+              blockedLogShown = true;
             }
+            return;
+          }
+          if (blockedLogShown) {
+            console.log('[stt] unblocked: mic is on, resuming sends');
+            blockedLogShown = false;
+          }
+          connection.send(e.data);
+          lastSentAtRef.current = Date.now();
+          chunkCount += 1;
+          if (chunkCount === 1 || chunkCount % 20 === 0) {
+            console.log(`[stt] sent ${chunkCount} chunks to Deepgram (last: ${e.data.size}B)`);
           }
         });
         recorder.start(250);
         console.log('[stt] MediaRecorder started, chunking every 250ms');
+
+        // If LiveKit already reports mic muted at this point (fresh session
+        // joined muted, or user muted during WS handshake), pause immediately.
+        if (localParticipant && !localParticipant.isMicrophoneEnabled) {
+          try {
+            recorder.pause();
+            console.log('[stt] mic was already muted at recorder start → paused');
+          } catch (err) {
+            console.warn('[stt] initial pause failed:', err);
+          }
+        }
 
         // KeepAlive heartbeat — Deepgram closes the socket after ~12s of
         // silence. If MediaRecorder hasn't produced data in 3s (silence,

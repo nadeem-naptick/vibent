@@ -28,6 +28,7 @@ type Options = {
   roomId: string;
   intents: DetectedIntent[];
   isHost: boolean;
+  thinkingMode: boolean;
   onIgnoreIntent: (intentId: string) => void;
   onPoolComposed: () => void; // hook for UI side effects (e.g. switch tab)
 };
@@ -44,6 +45,7 @@ export function useAutoCompose({
   roomId,
   intents,
   isHost,
+  thinkingMode,
   onIgnoreIntent,
   onPoolComposed,
 }: Options) {
@@ -128,7 +130,7 @@ export function useAutoCompose({
         const submitRes = await fetch('/api/decisions/compose', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ roomId, intentIds, instruction }),
+          body: JSON.stringify({ roomId, intentIds, instruction, thinkingMode }),
         });
         if (!submitRes.ok) {
           const data = await submitRes.json().catch(() => ({}));
@@ -161,6 +163,8 @@ export function useAutoCompose({
       .finally(() => {
         setComposing(false);
       });
+    // thinkingMode intentionally not in deps — it's read at submit time via
+    // runCompose closure capture, not re-fired on toggle.
   }, [pool, autoComposeThreshold, composing, isHost, runCompose, onPoolComposed]);
 
   // Manual "Apply now" — sweeps both pool AND any pending items (those still

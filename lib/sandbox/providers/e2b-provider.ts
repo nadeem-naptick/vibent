@@ -517,7 +517,8 @@ else:
     print(f'⚠ Warning: npm install had issues: {result.stderr}')
     `);
     
-    // Start Vite dev server
+    // Start Vite dev server. Redirect stdout/stderr to /tmp/vite.log so the
+    // check_preview tool can tail it for compile/runtime errors.
     await this.sandbox.runCode(`
 import subprocess
 import os
@@ -529,18 +530,19 @@ os.chdir('/home/user/app')
 subprocess.run(['pkill', '-f', 'vite'], capture_output=True)
 time.sleep(1)
 
-# Start Vite dev server
+# Start Vite dev server with file logging
 env = os.environ.copy()
 env['FORCE_COLOR'] = '0'
 
+log_file = open('/tmp/vite.log', 'w')
 process = subprocess.Popen(
     ['npm', 'run', 'dev'],
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
+    stdout=log_file,
+    stderr=subprocess.STDOUT,
     env=env
 )
 
-print(f'✓ Vite dev server started with PID: {process.pid}')
+print(f'✓ Vite dev server started with PID: {process.pid} (logs: /tmp/vite.log)')
 print('Waiting for server to be ready...')
     `);
     
@@ -575,18 +577,19 @@ os.chdir('/home/user/app')
 subprocess.run(['pkill', '-f', 'vite'], capture_output=True)
 time.sleep(2)
 
-# Start Vite dev server
+# Start Vite dev server with file logging
 env = os.environ.copy()
 env['FORCE_COLOR'] = '0'
 
+log_file = open('/tmp/vite.log', 'w')
 process = subprocess.Popen(
     ['npm', 'run', 'dev'],
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
+    stdout=log_file,
+    stderr=subprocess.STDOUT,
     env=env
 )
 
-print(f'✓ Vite restarted with PID: {process.pid}')
+print(f'✓ Vite restarted with PID: {process.pid} (logs: /tmp/vite.log)')
     `);
     
     // Wait for Vite to be ready

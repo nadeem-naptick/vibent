@@ -19,6 +19,10 @@ export async function POST(req: Request) {
   const roomId = body?.roomId ? String(body.roomId) : null;
   const intentIds: string[] = Array.isArray(body?.intentIds) ? body.intentIds : [];
   const instruction = body?.instruction ? String(body.instruction).trim() : null;
+  // Caller (client) sends the current thinking-mode preference at submit
+  // time. Default to true (thinking on) if not provided — preserves the
+  // historical behavior before the toggle existed.
+  const thinkingMode = body?.thinkingMode === undefined ? true : Boolean(body.thinkingMode);
 
   if (!roomId || !instruction || instruction.length < 5) {
     return NextResponse.json(
@@ -41,6 +45,7 @@ export async function POST(req: Request) {
       instruction,
       sourceIntentIds: intentIds,
       status: 'queued',
+      thinkingMode: thinkingMode ? 1 : 0,
     })
     .returning();
 

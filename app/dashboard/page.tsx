@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { desc, eq } from 'drizzle-orm';
+import { Plus, Sparkles, Layers3 } from 'lucide-react';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { rooms } from '@/lib/db/schema';
 import { OBJECTIVE_LABELS } from '@/lib/templates';
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import { DeleteRoomButton } from '@/components/DeleteRoomButton';
+import { AtmosphericBackground } from '@/components/AtmosphericBackground';
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -18,70 +20,134 @@ export default async function DashboardPage() {
     .where(eq(rooms.hostUserId, session.user.id))
     .orderBy(desc(rooms.createdAt));
 
+  const initial = (session.user.name ?? '?')[0]?.toUpperCase() ?? '?';
+
   return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-100">
-      <header className="border-b border-neutral-900 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-lg font-semibold tracking-tight">
-            Agentic Collaboration Room
-          </h1>
-          <span className="text-xs text-neutral-500">
-            {session.user.name}
-          </span>
+    <main className="relative min-h-screen text-white">
+      <AtmosphericBackground />
+
+      <header className="relative z-10 border-b border-white/8 bg-black/30 backdrop-blur-2xl">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-full bg-blue-500 text-white shadow-[0_0_34px_rgba(79,140,255,.42)]">
+              <Layers3 size={20} />
+            </div>
+            <div>
+              <div className="text-base font-semibold">Agentic Collaboration Room</div>
+              <div className="text-xs text-white/45">Live execution workspace</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/85 px-3 py-1.5">
+              <div className="grid h-6 w-6 place-items-center rounded-full bg-blue-500/25 text-blue-100 text-xs font-semibold">
+                {initial}
+              </div>
+              <span className="text-sm text-white/80">{session.user.name}</span>
+            </div>
+            <SignOutButton />
+          </div>
         </div>
-        <SignOutButton />
       </header>
 
-      <section className="max-w-5xl mx-auto px-6 py-10 space-y-8">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold tracking-tight">Your rooms</h2>
+      <section className="relative z-10 max-w-6xl mx-auto px-6 py-10 space-y-8">
+        <div className="flex items-end justify-between gap-4 flex-wrap">
+          <div>
+            <div className="text-xs uppercase tracking-widest text-white/40 mb-1">
+              Your workspace
+            </div>
+            <h1 className="text-3xl font-semibold tracking-tight">Rooms</h1>
+            <p className="text-sm text-white/55 mt-1">
+              {userRooms.length === 0
+                ? 'Spin up your first room to start collaborating with the agent.'
+                : `${userRooms.length} ${userRooms.length === 1 ? 'room' : 'rooms'} · click any to enter`}
+            </p>
+          </div>
           <Link
             href="/rooms/new"
-            className="rounded-md bg-neutral-100 text-neutral-950 px-4 py-2 text-sm font-medium hover:bg-white transition-colors"
+            className="inline-flex items-center gap-2 rounded-full border border-blue-400/40 bg-blue-500/25 text-blue-50 px-5 py-3 text-sm font-semibold shadow-2xl backdrop-blur-2xl hover:bg-blue-500/35 transition-colors"
           >
+            <Plus size={18} strokeWidth={2.4} />
             Create room
           </Link>
         </div>
 
         {userRooms.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-neutral-800 px-6 py-16 text-center space-y-3">
-            <p className="text-neutral-400">No rooms yet.</p>
-            <Link
-              href="/rooms/new"
-              className="inline-block text-sm text-neutral-100 underline underline-offset-4 hover:text-white"
-            >
-              Create your first room →
-            </Link>
-          </div>
+          <EmptyState />
         ) : (
           <ul className="grid gap-3">
             {userRooms.map((room) => (
-              <li
+              <RoomCard
                 key={room.id}
-                className="group relative rounded-lg border border-neutral-900 hover:border-neutral-700 hover:bg-neutral-925 transition-colors"
-              >
-                <Link href={`/rooms/${room.id}`} className="block px-5 py-4">
-                  <div className="flex items-center justify-between gap-4 pr-16">
-                    <div className="space-y-1 min-w-0">
-                      <div className="font-medium truncate">{room.title}</div>
-                      <div className="text-xs text-neutral-500 flex items-center gap-2">
-                        <span>{OBJECTIVE_LABELS[room.objective]}</span>
-                        <span>·</span>
-                        <span>{formatDate(room.createdAt)}</span>
-                      </div>
-                    </div>
-                    <StatusBadge status={room.status} />
-                  </div>
-                </Link>
-                <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <DeleteRoomButton roomId={room.id} roomTitle={room.title} />
-                </div>
-              </li>
+                roomId={room.id}
+                title={room.title}
+                objectiveLabel={OBJECTIVE_LABELS[room.objective]}
+                createdAt={room.createdAt}
+                status={room.status}
+              />
             ))}
           </ul>
         )}
       </section>
     </main>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="rounded-[28px] border border-white/10 bg-slate-900/40 backdrop-blur-2xl px-8 py-20 text-center space-y-4 shadow-2xl">
+      <div className="grid h-16 w-16 mx-auto place-items-center rounded-full bg-blue-500/15 text-blue-200">
+        <Sparkles size={28} className="animate-pulse" />
+      </div>
+      <div>
+        <p className="text-lg font-semibold text-white">No rooms yet</p>
+        <p className="text-sm text-white/55 mt-1.5 max-w-md mx-auto">
+          A room is a live workspace where you talk through a product idea and
+          the agent builds it in real time.
+        </p>
+      </div>
+      <Link
+        href="/rooms/new"
+        className="inline-flex items-center gap-2 rounded-full border border-blue-400/40 bg-blue-500/25 text-blue-50 px-5 py-2.5 text-sm font-semibold hover:bg-blue-500/35 transition-colors"
+      >
+        <Plus size={16} strokeWidth={2.4} />
+        Create your first room
+      </Link>
+    </div>
+  );
+}
+
+function RoomCard({
+  roomId,
+  title,
+  objectiveLabel,
+  createdAt,
+  status,
+}: {
+  roomId: string;
+  title: string;
+  objectiveLabel: string;
+  createdAt: Date;
+  status: string;
+}) {
+  return (
+    <li className="group relative rounded-2xl border border-white/8 bg-slate-900/50 backdrop-blur-xl hover:border-white/20 hover:bg-slate-900/80 transition-all">
+      <Link href={`/rooms/${roomId}`} className="block px-5 py-4">
+        <div className="flex items-center justify-between gap-4 pr-16">
+          <div className="space-y-1.5 min-w-0">
+            <div className="font-semibold truncate text-base">{title}</div>
+            <div className="text-xs text-white/45 flex items-center gap-2">
+              <span>{objectiveLabel}</span>
+              <span className="text-white/20">·</span>
+              <span>{formatDate(createdAt)}</span>
+            </div>
+          </div>
+          <StatusBadge status={status} />
+        </div>
+      </Link>
+      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+        <DeleteRoomButton roomId={roomId} roomTitle={title} />
+      </div>
+    </li>
   );
 }
 
@@ -95,17 +161,24 @@ function formatDate(d: Date) {
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    provisioning: 'bg-amber-950 text-amber-400 border-amber-900',
-    active: 'bg-emerald-950 text-emerald-400 border-emerald-900',
-    archived: 'bg-neutral-900 text-neutral-500 border-neutral-800',
-    error: 'bg-red-950 text-red-400 border-red-900',
+    provisioning: 'bg-amber-500/15 text-amber-200 border-amber-400/30',
+    active: 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30',
+    archived: 'bg-white/10 text-white/55 border-white/15',
+    error: 'bg-red-500/15 text-red-200 border-red-400/30',
+  };
+  const dotColors: Record<string, string> = {
+    provisioning: 'bg-amber-400 animate-pulse',
+    active: 'bg-emerald-400',
+    archived: 'bg-white/40',
+    error: 'bg-red-400',
   };
   return (
     <span
-      className={`text-xs px-2 py-0.5 rounded border ${
+      className={`text-[11px] font-medium px-2.5 py-1 rounded-full border inline-flex items-center gap-1.5 ${
         colors[status] ?? colors.archived
       }`}
     >
+      <span className={`h-1.5 w-1.5 rounded-full ${dotColors[status] ?? dotColors.archived}`} />
       {status}
     </span>
   );

@@ -156,6 +156,9 @@ export const tasks = pgTable('tasks', {
   status: taskStatusEnum('status').notNull().default('queued'),
   summary: text('summary'),
   model: text('model'),
+  // Per-task thinking mode toggle. When true, the executing agent uses
+  // extended reasoning (slower, deeper). When false, it runs in fast mode.
+  thinkingMode: integer('thinking_mode').notNull().default(1),
   events: jsonb('events').$type<TaskEvent[]>().default([]),
   error: text('error'),
   createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),

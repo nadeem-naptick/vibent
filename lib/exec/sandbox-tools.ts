@@ -41,7 +41,7 @@ function rethrowIfLost(err: unknown): never | void {
 //
 // All paths are project-root-relative. The sandbox provider already
 // normalises to its working directory (/vercel/sandbox for Vercel).
-export function createSandboxTools(sandbox: SandboxProvider) {
+export function createSandboxTools(sandbox: SandboxProvider, sandboxUrl: string) {
   return {
     list_files: tool({
       description:
@@ -141,6 +141,126 @@ export function createSandboxTools(sandbox: SandboxProvider) {
         }
       },
     }),
+
+    check_preview: tool({
+      description:
+        'Verify the live preview is actually rendering. ALWAYS call this after writing files — a syntax error, missing import, or removed JSX root will cause a white screen and the user will think your work was lost. Returns the URL status, recent Vite dev server log lines, and whether the page looks healthy. If looksHealthy is false, find the error in viteLog or bodyPreview, fix the underlying file, then call check_preview again.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        try {
+          const result = await checkPreview(sandbox, sandboxUrl);
+          return { ok: true, ...result };
+        } catch (err) {
+          rethrowIfLost(err);
+          return { ok: false, error: errMsg(err) };
+        }
+      },
+    }),
+  };
+}
+
+export type PreviewCheck = {
+  looksHealthy: boolean;
+  urlStatus: number;
+  bodyHasErrorMarkup: boolean;
+  bodyPreview: string;
+  viteLog: string;
+  reasons: string[];
+};
+
+// Combined health check the agent (and the post-task verifier) can use to
+// decide whether the user is about to see a white screen. Fetches the preview
+// URL + tails the Vite dev server log inside the sandbox.
+export async function checkPreview(
+  sandbox: SandboxProvider,
+  sandboxUrl: string,
+): Promise<PreviewCheck> {
+  const reasons: string[] = [];
+
+  // 1. HTTP probe of the preview URL.
+  let urlStatus = 0;
+  let bodyPreview = '';
+  let bodyHasErrorMarkup = false;
+  let mainModuleOk = true;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(sandboxUrl, {
+      signal: ctrl.signal,
+      headers: { 'user-agent': 'agentic-room-preview-check' },
+    });
+    clearTimeout(t);
+    urlStatus = res.status;
+    const body = await res.text();
+    bodyPreview = body.slice(0, 1200);
+    // Vite injects an error overlay element when there's a transform error.
+    bodyHasErrorMarkup = /vite-error-overlay|Internal server error|Failed to (?:resolve|load) (?:module|import)/i.test(
+      body,
+    );
+    if (urlStatus >= 400) reasons.push(`URL returned HTTP ${urlStatus}`);
+    if (bodyHasErrorMarkup) reasons.push('Vite error overlay present in HTML');
+
+    // The index HTML usually loads `/src/main.tsx` or `/src/main.jsx`. If that
+    // module fails to transform, Vite returns 500 with the error text. Probe
+    // both common entry points.
+    const entryMatch = body.match(/src=["'](\/[^"']*main\.(?:tsx|jsx|ts|js))["']/);
+    const entryPath = entryMatch?.[1];
+    if (entryPath) {
+      try {
+        const ctrl2 = new AbortController();
+        const t2 = setTimeout(() => ctrl2.abort(), 6000);
+        const moduleRes = await fetch(`${sandboxUrl}${entryPath}`, {
+          signal: ctrl2.signal,
+          headers: { 'user-agent': 'agentic-room-preview-check' },
+        });
+        clearTimeout(t2);
+        if (moduleRes.status >= 400) {
+          mainModuleOk = false;
+          const moduleBody = await moduleRes.text();
+          reasons.push(
+            `entry module ${entryPath} returned HTTP ${moduleRes.status}: ${moduleBody.slice(0, 200)}`,
+          );
+        }
+      } catch (mErr) {
+        mainModuleOk = false;
+        reasons.push(`entry module fetch failed: ${errMsg(mErr)}`);
+      }
+    }
+  } catch (err) {
+    reasons.push(`URL fetch failed: ${errMsg(err)}`);
+  }
+
+  // 2. Tail recent Vite log lines (only available if Vite was started with
+  // file logging — newer provisions do this; older ones return a placeholder).
+  let viteLog = '';
+  try {
+    const logResult = await sandbox.runCommand(
+      'tail -n 80 /tmp/vite.log 2>/dev/null || echo "(vite log not captured — older sandbox)"',
+    );
+    viteLog = (logResult.stdout || '').trim();
+  } catch {
+    viteLog = '(could not read vite log)';
+  }
+  const hasViteError =
+    /Internal server error|\[plugin:|Transform failed|Failed to resolve import|Unexpected token|SyntaxError/i.test(
+      viteLog,
+    );
+  if (hasViteError) reasons.push('Vite log shows compile error');
+
+  const looksHealthy =
+    urlStatus >= 200 &&
+    urlStatus < 400 &&
+    !bodyHasErrorMarkup &&
+    !hasViteError &&
+    mainModuleOk;
+
+  return {
+    looksHealthy,
+    urlStatus,
+    bodyHasErrorMarkup,
+    bodyPreview,
+    viteLog: viteLog.slice(-2500),
+    reasons,
   };
 }
 

@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { rooms, tasks, type TaskEvent } from '@/lib/db/schema';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
-import { createSandboxTools, SandboxLostError } from './sandbox-tools';
+import { createSandboxTools, SandboxLostError, checkPreview } from './sandbox-tools';
 import { createVersion } from '@/lib/snapshots/manager';
 import { sandboxManager as sandboxManagerForRetry } from '@/lib/sandbox/sandbox-manager';
 import { provisionRoomSandbox } from '@/lib/sandbox/room-sandbox';
@@ -50,13 +50,13 @@ function resolveModel() {
 // Per-provider extras (e.g. enable Gemini thinking for the executing agent —
 // it's a multi-step coding task that benefits from reasoning; the classifier
 // stays no-thinking for speed).
-function execProviderOptions(provider: ExecProvider) {
+function execProviderOptions(provider: ExecProvider, thinkingOn: boolean) {
   if (provider === 'google') {
     return {
       google: {
         thinkingConfig: {
-          // -1 = dynamic budget; model decides how much to think per step
-          thinkingBudget: -1,
+          // -1 = dynamic budget (model decides); 0 = thinking disabled
+          thinkingBudget: thinkingOn ? -1 : 0,
           includeThoughts: false,
         },
       },
@@ -99,7 +99,16 @@ Vite has HMR enabled, so any file you write triggers an immediate reload in the 
 5. If a new component is appropriate, create it under src/components/ and import it.
 6. If you need a new npm package, use install_packages. Don't try to npm install via run_command.
 7. Do not start dev servers. Vite is already running.
-8. When done, briefly summarize what you changed in your final message (one paragraph).
+8. **After your last write_file, ALWAYS call check_preview.** If it reports \`looksHealthy: false\`, read the \`reasons\` / \`viteLog\` / \`bodyPreview\`, identify the broken file, fix it with write_file, and call check_preview again. Do not finish until \`looksHealthy: true\` — otherwise the user gets a white screen.
+9. When the preview is healthy, briefly summarize what you changed in your final message (one paragraph).
+
+# Avoiding white screens — common causes
+- Removed or missing import that your new JSX references
+- Syntax error in JSX (unclosed tag, stray brace)
+- Wrong file extension (writing src/App.jsx when project uses src/App.tsx)
+- Accidentally deleted the \`<App />\` render in main.tsx or the \`<div id="root">\` in index.html
+- Importing a component file you forgot to create
+If check_preview shows a Vite error, the fix is almost always in the file mentioned in the error.
 
 # What NOT to do
 - Don't change unrelated files.
@@ -107,7 +116,7 @@ Vite has HMR enabled, so any file you write triggers an immediate reload in the 
 - Don't write tests unless the instruction asks for them.
 - Don't run \`npm run dev\` or \`npm run build\` — they're not needed.
 
-You have these tools: list_files, read_file, write_file, install_packages, run_command.`;
+You have these tools: list_files, read_file, write_file, install_packages, run_command, check_preview.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +177,7 @@ export async function runTask(taskId: string): Promise<void> {
     .where(eq(tasks.id, task.id));
 
   const events: TaskEvent[] = [];
-  const tools = createSandboxTools(sandbox);
+  const tools = createSandboxTools(sandbox, room.sandboxUrl ?? '');
 
   // Register abort controller so /api/tasks/[id]/cancel can stop us
   const abortController = new AbortController();
@@ -184,39 +193,106 @@ export async function runTask(taskId: string): Promise<void> {
   };
 
   try {
-    const result = await generateText({
+    const thinkingOn = task.thinkingMode !== 0;
+    const systemPrompt = buildSystemPrompt(room);
+    const onStep = async ({ text, toolCalls, toolResults }: {
+      text?: string;
+      toolCalls?: Array<{ toolName: string; input: unknown }>;
+      toolResults?: Array<{ toolName: string; output: unknown }>;
+    }) => {
+      if (text?.trim()) {
+        events.push({ ts: Date.now(), kind: 'text', text });
+      }
+      for (const tc of toolCalls ?? []) {
+        events.push({
+          ts: Date.now(),
+          kind: 'tool_call',
+          toolName: tc.toolName,
+          data: summarizeToolInput(tc.toolName, tc.input),
+        });
+      }
+      for (const tr of toolResults ?? []) {
+        events.push({
+          ts: Date.now(),
+          kind: 'tool_result',
+          toolName: tr.toolName,
+          data: summarizeToolResult(tr.toolName, tr.output),
+        });
+      }
+      await flushEvents();
+    };
+
+    let result = await generateText({
       model,
       tools,
-      providerOptions: execProviderOptions(execProvider),
+      providerOptions: execProviderOptions(execProvider, thinkingOn),
       abortSignal: abortController.signal,
       stopWhen: ({ steps }: { steps: unknown[] }) => steps.length >= MAX_STEPS,
       messages: [
-        { role: 'system', content: buildSystemPrompt(room) },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: task.instruction },
       ],
-      onStepFinish: async ({ text, toolCalls, toolResults }) => {
-        if (text?.trim()) {
-          events.push({ ts: Date.now(), kind: 'text', text });
-        }
-        for (const tc of toolCalls ?? []) {
-          events.push({
-            ts: Date.now(),
-            kind: 'tool_call',
-            toolName: tc.toolName,
-            data: summarizeToolInput(tc.toolName, tc.input),
-          });
-        }
-        for (const tr of toolResults ?? []) {
-          events.push({
-            ts: Date.now(),
-            kind: 'tool_result',
-            toolName: tr.toolName,
-            data: summarizeToolResult(tr.toolName, tr.output),
-          });
-        }
-        await flushEvents();
-      },
+      onStepFinish: onStep,
     });
+
+    // Post-task verification + auto-fix loop. If the agent claims done but
+    // the preview is actually broken (white screen, build error), feed the
+    // error back and let it try again. This is the safety net for when the
+    // model forgets to call check_preview or misses a build break.
+    const MAX_FIX_PASSES = 2;
+    if (room.sandboxUrl) {
+      for (let pass = 1; pass <= MAX_FIX_PASSES; pass++) {
+        let preview;
+        try {
+          preview = await checkPreview(sandbox, room.sandboxUrl);
+        } catch (err) {
+          console.warn('[run-task] post-task preview check threw:', err);
+          break;
+        }
+        if (preview.looksHealthy) {
+          if (pass > 1) {
+            console.log(`[run-task] preview healthy after auto-fix pass ${pass - 1}`);
+          }
+          break;
+        }
+        console.warn(
+          `[run-task] preview broken after agent finished (pass ${pass}): ${preview.reasons.join('; ')}`,
+        );
+        events.push({
+          ts: Date.now(),
+          kind: 'text',
+          text: `⚠️ Preview check failed: ${preview.reasons.join('; ')}. Auto-fixing...`,
+        });
+        await flushEvents();
+
+        // Continue the conversation with the broken-preview context. The
+        // model retains tool access and can read/write files to fix things.
+        const responseMessages = result.response?.messages ?? [];
+        const fixInstruction =
+          `The preview is currently BROKEN — the user will see a white screen.\n\n` +
+          `Reasons reported:\n${preview.reasons.map((r) => `- ${r}`).join('\n')}\n\n` +
+          (preview.viteLog ? `Recent Vite log:\n\`\`\`\n${preview.viteLog}\n\`\`\`\n\n` : '') +
+          (preview.bodyPreview
+            ? `Body preview:\n\`\`\`html\n${preview.bodyPreview}\n\`\`\`\n\n`
+            : '') +
+          `Find the broken file, fix it, then call check_preview to confirm. Do NOT redo unrelated work — just fix the build/runtime error.`;
+
+        result = await generateText({
+          model,
+          tools,
+          providerOptions: execProviderOptions(execProvider, thinkingOn),
+          abortSignal: abortController.signal,
+          stopWhen: ({ steps }: { steps: unknown[] }) => steps.length >= 10,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: task.instruction },
+            ...responseMessages,
+            { role: 'user', content: fixInstruction },
+          ],
+          onStepFinish: onStep,
+        });
+      }
+    }
 
     await db
       .update(tasks)

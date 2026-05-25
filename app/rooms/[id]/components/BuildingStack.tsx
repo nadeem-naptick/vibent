@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Zap, Check, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Zap, Check, X, AlertTriangle, ListChecks } from 'lucide-react';
 import { toast } from 'sonner';
 import type { LiveTask } from '../types';
 
@@ -11,9 +11,40 @@ type Props = {
   isHost: boolean;
 };
 
+// Cards auto-dismiss this many ms after task ends (complete/failed/cancelled)
+const AUTO_DISMISS_MS = 3000;
+
 export function BuildingStack({ tasks, isHost }: Props) {
-  const [expanded, setExpanded] = useState(false);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [showAll, setShowAll] = useState(false);
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
+
+  // Schedule auto-dismiss for finished tasks. Paused while showAll is true
+  // so the history panel doesn't lose entries the user is reading.
+  useEffect(() => {
+    if (showAll) return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    for (const t of tasks) {
+      if (t.status !== 'complete' && t.status !== 'failed' && t.status !== 'cancelled') continue;
+      if (dismissed.has(t.id)) continue;
+      timers.push(
+        setTimeout(() => {
+          setDismissed((prev) => new Set(prev).add(t.id));
+        }, AUTO_DISMISS_MS),
+      );
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [tasks, dismissed, showAll]);
+
+  // When showAll → every task. Otherwise → queued/running + recently-finished
+  const visible = showAll
+    ? tasks
+    : tasks.filter((t) => {
+        if (t.status === 'queued' || t.status === 'running') return true;
+        return !dismissed.has(t.id);
+      });
+
+  const hasActive = tasks.some((t) => t.status === 'queued' || t.status === 'running');
 
   async function cancelTask(task: LiveTask) {
     const isRunning = task.status === 'running';
@@ -40,57 +71,50 @@ export function BuildingStack({ tasks, isHost }: Props) {
     }
   }
 
-  // Auto-fan the stack the moment a task starts running, so the user sees
-  // progress without having to click. Auto-collapse again when nothing is
-  // active.
-  const prevRunningRef = useRef(false);
-  useEffect(() => {
-    const hasRunning = tasks.some((t) => t.status === 'running');
-    if (hasRunning && !prevRunningRef.current) {
-      setExpanded(true);
-    } else if (!hasRunning && prevRunningRef.current) {
-      // small delay before collapsing so the success state is visible
-      const t = setTimeout(() => setExpanded(false), 2500);
-      return () => clearTimeout(t);
-    }
-    prevRunningRef.current = hasRunning;
-  }, [tasks]);
-
-  // Show only active (queued + running) plus most-recent completed at the
-  // top. Older completed tasks live in the Active Tasks drawer.
-  const active = tasks.filter(
-    (t) => t.status === 'queued' || t.status === 'running',
-  );
-  const recentDone = tasks
-    .filter((t) => t.status === 'complete' || t.status === 'failed')
-    .slice(0, 2);
-  const visible = [...active, ...recentDone];
-
-  if (visible.length === 0) return null;
+  // If nothing to show and no history button needed, render nothing
+  if (visible.length === 0 && tasks.length === 0) return null;
 
   return (
-    <div className="absolute right-5 top-24 z-30 w-[320px] pointer-events-none">
+    <div className="absolute right-5 top-24 z-30 w-[320px] pointer-events-none flex flex-col gap-2">
+      {/* History toggle — always visible when any tasks exist */}
+      {tasks.length > 0 && (
+        <button
+          onClick={() => setShowAll((v) => !v)}
+          className="pointer-events-auto self-end flex items-center gap-2 rounded-full border border-white/10 bg-black/10 backdrop-blur-2xl px-3 py-1.5 text-xs text-white/65 hover:text-white hover:bg-black/30 shadow-2xl transition-colors"
+          title={showAll ? 'Hide history' : 'Show all tasks'}
+        >
+          <ListChecks size={14} strokeWidth={2.2} />
+          {showAll ? 'Hide' : `${tasks.length}`}
+          {hasActive && !showAll && (
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+          )}
+        </button>
+      )}
+
+      {/* Scrollable list when showAll, otherwise just stacked transient cards */}
       <div
-        className="relative pointer-events-auto"
-        style={{
-          height: expanded
-            ? Math.min(visible.length * 110, Math.round((typeof window !== 'undefined' ? window.innerHeight : 800) * 0.5))
-            : 110,
-          overflowY: expanded && visible.length > 4 ? 'auto' : 'visible',
-        }}
+        className={`pointer-events-auto flex flex-col gap-2 ${
+          showAll ? 'max-h-[60vh] overflow-y-auto pr-1' : ''
+        }`}
       >
-        {visible.map((task, index) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            index={index}
-            expanded={expanded}
-            stackSize={visible.length}
-            onToggle={() => setExpanded((v) => !v)}
-            onCancel={isHost ? () => cancelTask(task) : undefined}
-            cancelling={cancellingIds.has(task.id)}
-          />
-        ))}
+        <AnimatePresence>
+          {visible.map((task) => (
+            <motion.div
+              key={task.id}
+              layout
+              initial={{ opacity: 0, y: -8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 16, scale: 0.96, transition: { duration: 0.3 } }}
+              transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+            >
+              <TaskCard
+                task={task}
+                onCancel={isHost ? () => cancelTask(task) : undefined}
+                cancelling={cancellingIds.has(task.id)}
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -98,154 +122,90 @@ export function BuildingStack({ tasks, isHost }: Props) {
 
 function TaskCard({
   task,
-  index,
-  expanded,
-  stackSize,
-  onToggle,
   onCancel,
   cancelling,
 }: {
   task: LiveTask;
-  index: number;
-  expanded: boolean;
-  stackSize: number;
-  onToggle: () => void;
   onCancel?: () => void;
   cancelling: boolean;
 }) {
-  const progress = computeProgress(task);
   const isLive = task.status === 'running';
   const isDone = task.status === 'complete';
   const isFailed = task.status === 'failed';
-
   const isCancelled = task.status === 'cancelled';
+  const isQueued = task.status === 'queued';
 
-  const borderColor = isFailed
-    ? 'border-red-400/30'
-    : isCancelled
-    ? 'border-neutral-500/30'
-    : isDone
-    ? 'border-emerald-400/25'
-    : 'border-blue-400/25';
-
-  const accentText = isFailed
-    ? 'text-red-200'
-    : isCancelled
-    ? 'text-neutral-300'
-    : isDone
-    ? 'text-emerald-100'
-    : 'text-blue-100';
-
-  const progressBar = isFailed
-    ? 'bg-red-500'
-    : isCancelled
-    ? 'bg-neutral-500'
-    : isDone
-    ? 'bg-emerald-500'
-    : 'bg-blue-500';
+  const accentText =
+    isFailed || isCancelled
+      ? 'text-white/70'
+      : isDone
+      ? 'text-emerald-200'
+      : 'text-white/80';
 
   return (
-    <motion.div
-      animate={{
-        y: expanded ? index * 110 : index * 10,
-        scale: expanded ? 1 : 1 - index * 0.035,
-        opacity: expanded ? 1 : 1 - index * 0.12,
-        zIndex: stackSize - index,
-      }}
-      transition={{ type: 'spring', stiffness: 260, damping: 28 }}
-      onClick={onToggle}
-      className={`absolute top-0 left-0 right-0 cursor-pointer rounded-[24px] border ${borderColor} bg-[#0B0F14] p-4 shadow-2xl`}
-      style={{ zIndex: stackSize - index }}
-    >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className={`flex items-center gap-2 text-sm font-semibold ${accentText}`}>
-          {isDone ? <Check size={16} /> : <Zap size={isLive ? 16 : 14} className={isLive ? 'animate-pulse' : ''} />}
+    <div className="rounded-2xl border border-white/10 bg-black/85 backdrop-blur-2xl p-3.5 shadow-2xl">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <div className={`flex items-center gap-1.5 text-xs font-semibold ${accentText}`}>
+          {isDone ? (
+            <Check size={14} />
+          ) : isFailed ? (
+            <AlertTriangle size={14} />
+          ) : (
+            <Zap size={isLive ? 14 : 12} className={isLive ? 'animate-pulse' : ''} />
+          )}
           <span className="capitalize">
-            {task.status === 'running'
+            {isLive
               ? 'Building'
-              : task.status === 'queued'
+              : isQueued
               ? 'Queued'
-              : task.status === 'complete'
+              : isDone
               ? 'Done'
-              : task.status === 'cancelled'
+              : isCancelled
               ? 'Cancelled'
               : 'Failed'}
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`text-[10px] ${accentText}`}>
-            {task.model?.split('/').pop() ?? ''}
-          </span>
-          {onCancel && (task.status === 'queued' || task.status === 'running') && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onCancel();
-              }}
-              disabled={cancelling}
-              title={task.status === 'running' ? 'Stop and roll back' : 'Cancel'}
-              className="grid h-6 w-6 place-items-center rounded-full border border-white/10 bg-white/5 text-white/50 hover:text-red-300 hover:border-red-400/30 disabled:opacity-50"
-            >
-              <X size={12} />
-            </button>
-          )}
-        </div>
+        {onCancel && (isQueued || isLive) && (
+          <button
+            onClick={onCancel}
+            disabled={cancelling}
+            title={isLive ? 'Stop and roll back' : 'Cancel'}
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/10 text-white/70 hover:bg-red-500/80 hover:text-white disabled:opacity-50 transition-colors"
+          >
+            <X size={12} strokeWidth={2.5} />
+          </button>
+        )}
       </div>
-      <div className="flex items-center justify-between text-xs gap-3">
-        <span className="text-white/58 truncate min-w-0">{task.instruction}</span>
-        <span className={`${accentText} shrink-0 tabular-nums`}>{progress}%</span>
-      </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-        <motion.div
-          className={`h-full rounded-full ${progressBar}`}
-          initial={{ width: '0%' }}
-          animate={{ width: `${progress}%` }}
-          transition={{ duration: 0.6 }}
-        />
-      </div>
-      {expanded && task.events.length > 0 && (
-        <div className="mt-3 max-h-32 overflow-y-auto border-t border-white/5 pt-2">
-          <ol className="space-y-0.5">
-            {task.events.slice(-6).map((ev, i) => (
-              <li key={i} className="text-[11px] text-white/45 truncate">
-                {formatEvent(ev)}
-              </li>
-            ))}
-          </ol>
+      <div className="text-sm text-white/85 leading-snug line-clamp-2">{task.instruction}</div>
+      {isLive && task.events.length > 0 && (
+        <div className="mt-2 text-[11px] text-white/45 leading-snug truncate">
+          {formatLastEvent(task.events[task.events.length - 1])}
         </div>
       )}
-      {expanded && task.error && (
-        <div className="mt-2 text-[11px] text-red-300 font-mono leading-snug">
+      {isDone && task.summary && (
+        <div className="mt-1.5 text-[11px] italic text-white/45 leading-snug line-clamp-2">
+          {task.summary}
+        </div>
+      )}
+      {isFailed && task.error && (
+        <div className="mt-1.5 text-[11px] text-red-300/80 leading-snug line-clamp-2">
           {task.error}
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
 
-function computeProgress(task: LiveTask): number {
-  if (task.status === 'complete') return 100;
-  if (task.status === 'failed') return 100;
-  if (task.status === 'queued') return 0;
-  // Running — derive a fake-but-monotonic value from event count, capped at 90.
-  const events = task.events?.length ?? 0;
-  return Math.min(90, 12 + events * 4);
-}
-
-function formatEvent(ev: LiveTask['events'][number]): string {
+function formatLastEvent(ev: LiveTask['events'][number]): string {
   if (ev.kind === 'tool_call') {
     const data = ev.data as Record<string, unknown> | undefined;
-    if (ev.toolName === 'write_file' && data) return `write ${data.path}`;
-    if (ev.toolName === 'read_file' && data) return `read ${data.path}`;
-    if (ev.toolName === 'list_files' && data) return `ls ${data.directory ?? '.'}`;
-    if (ev.toolName === 'install_packages' && data) return `npm i ${(data.packages as string[])?.join(' ') ?? ''}`;
-    if (ev.toolName === 'run_command' && data) return `$ ${data.command}`;
-    return ev.toolName ?? 'tool';
+    if (ev.toolName === 'write_file' && data) return `→ write ${data.path}`;
+    if (ev.toolName === 'read_file' && data) return `→ read ${data.path}`;
+    if (ev.toolName === 'list_files' && data) return `→ ls ${data.directory ?? '.'}`;
+    if (ev.toolName === 'install_packages' && data) return `→ npm i ${(data.packages as string[])?.join(' ') ?? ''}`;
+    if (ev.toolName === 'run_command' && data) return `→ $ ${data.command}`;
+    return `→ ${ev.toolName ?? 'tool'}`;
   }
   if (ev.kind === 'text') return ev.text ?? '';
-  if (ev.kind === 'tool_result') {
-    const data = ev.data as { ok?: boolean } | undefined;
-    return `${ev.toolName} → ${data?.ok === false ? 'failed' : 'ok'}`;
-  }
-  return ev.text ?? 'event';
+  return ev.text ?? '';
 }
