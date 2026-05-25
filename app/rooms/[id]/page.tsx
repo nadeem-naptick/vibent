@@ -18,6 +18,7 @@ import { getLatestVersion, listVersions } from '@/lib/snapshots/manager';
 import { restoreRoomSandbox } from '@/lib/sandbox/room-sandbox';
 import { LiveRoomClient } from './LiveRoomClient';
 import { SignOutButton } from '@/components/auth/SignOutButton';
+import { SettingsButton } from './SettingsButton';
 import type { RoomFeed } from './types';
 
 export default async function RoomPage({
@@ -132,10 +133,11 @@ export default async function RoomPage({
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-4 text-sm">
+        <div className="flex items-center gap-3 text-sm">
           <span className="text-neutral-500">
             {participant.role} · {participant.displayName}
           </span>
+          <SettingsButton />
           <SignOutButton />
         </div>
       </header>

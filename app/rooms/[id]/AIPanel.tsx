@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DetectedIntent, IntentType, TranscriptSegment } from '@/lib/db/mongo';
 import type { LiveTask, LiveVersion } from './types';
-import { ComposeDecisionModal } from './ComposeDecisionModal';
 import { VersionsTab } from './VersionsTab';
+import { useAutoCompose } from './useAutoCompose';
 
 type Tab = 'transcript' | 'detected' | 'tasks' | 'versions' | 'open';
 
@@ -39,51 +39,17 @@ export function AIPanel({
 }: Props) {
   const [tab, setTab] = useState<Tab>('detected');
 
-  // Selection of detections that will become a composed decision.
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [composing, setComposing] = useState(false);
-
   const grouped = useMemo(() => groupIntents(intents), [intents]);
-  const selectedIntents = useMemo(
-    () => grouped.active.filter((i) => selectedIds.has(i.id)),
-    [grouped.active, selectedIds],
-  );
 
-  // Prune selection if intents change underneath (e.g. one got ignored).
-  useEffect(() => {
-    setSelectedIds((prev) => {
-      const next = new Set<string>();
-      for (const i of grouped.active) if (prev.has(i.id)) next.add(i.id);
-      return next.size === prev.size ? prev : next;
-    });
-  }, [grouped.active]);
-
-  function toggleSelect(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function clearSelection() {
-    setSelectedIds(new Set());
-  }
-
-  function removeFromCompose(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }
-
-  function onComposeSubmitted() {
-    setComposing(false);
-    clearSelection();
-    setTab('tasks');
-  }
+  // Auto-compose lifecycle: pending countdown → pool accumulator → auto-submit
+  // when threshold reached. The host can intervene at any stage via X.
+  const autoCompose = useAutoCompose({
+    roomId,
+    intents,
+    isHost,
+    onIgnoreIntent: (id) => onUpdateIntent(id, { status: 'ignored' }),
+    onPoolComposed: () => setTab('tasks'),
+  });
 
   return (
     <div className="relative flex flex-col h-full bg-neutral-950 text-neutral-100">
@@ -111,14 +77,16 @@ export function AIPanel({
         </nav>
       </div>
 
-      <div className={`flex-1 overflow-y-auto ${selectedIds.size > 0 ? 'pb-16' : ''}`}>
+      <div className="flex-1 overflow-y-auto">
         {tab === 'transcript' && <TranscriptList transcripts={transcripts} />}
         {tab === 'detected' && (
-          <DetectionList
-            intents={grouped.active}
-            selectedIds={selectedIds}
-            onToggle={toggleSelect}
-            onIgnore={(id) => onUpdateIntent(id, { status: 'ignored' })}
+          <DetectedTab
+            pending={autoCompose.pending}
+            pool={autoCompose.pool}
+            threshold={autoCompose.threshold}
+            composing={autoCompose.composing}
+            onRemovePending={autoCompose.removePending}
+            onRemoveFromPool={autoCompose.removeFromPool}
             isHost={isHost}
           />
         )}
@@ -139,36 +107,6 @@ export function AIPanel({
         )}
       </div>
 
-      {/* Sticky compose bar */}
-      {isHost && selectedIds.size > 0 && tab === 'detected' && (
-        <div className="absolute bottom-0 left-0 right-0 border-t border-neutral-800 bg-neutral-950 px-4 py-2.5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 text-xs">
-            <span className="font-medium">{selectedIds.size} selected</span>
-            <button
-              onClick={clearSelection}
-              className="text-neutral-500 hover:text-neutral-300"
-            >
-              clear
-            </button>
-          </div>
-          <button
-            onClick={() => setComposing(true)}
-            className="text-xs rounded bg-neutral-100 text-neutral-950 px-3 py-1.5 font-medium hover:bg-white"
-          >
-            Compose decision →
-          </button>
-        </div>
-      )}
-
-      {composing && (
-        <ComposeDecisionModal
-          roomId={roomId}
-          selected={selectedIntents}
-          onRemove={removeFromCompose}
-          onClose={() => setComposing(false)}
-          onSubmitted={onComposeSubmitted}
-        />
-      )}
     </div>
   );
 }
@@ -193,70 +131,170 @@ function TranscriptList({ transcripts }: { transcripts: TranscriptSegment[] }) {
   );
 }
 
-function DetectionList({
-  intents,
-  selectedIds,
-  onToggle,
-  onIgnore,
+function DetectedTab({
+  pending,
+  pool,
+  threshold,
+  composing,
+  onRemovePending,
+  onRemoveFromPool,
   isHost,
 }: {
-  intents: DetectedIntent[];
-  selectedIds: Set<string>;
-  onToggle: (id: string) => void;
-  onIgnore: (id: string) => void;
+  pending: { intent: DetectedIntent; msLeft: number; progress: number }[];
+  pool: DetectedIntent[];
+  threshold: number;
+  composing: boolean;
+  onRemovePending: (intentId: string) => void;
+  onRemoveFromPool: (intentId: string) => void;
   isHost: boolean;
 }) {
-  if (intents.length === 0) {
+  if (pending.length === 0 && pool.length === 0 && !composing) {
     return (
       <Empty>
-        Detections appear as participants speak. Check the ones you want, then
-        compose a decision.
+        Detections will appear here as participants speak. Each one gets a
+        5-second window to be removed — survivors auto-bundle into a decision
+        once {threshold} have accumulated.
       </Empty>
     );
   }
+
   return (
-    <ul className="divide-y divide-neutral-900">
-      {intents.map((intent) => {
-        const checked = selectedIds.has(intent.id);
-        return (
-          <li
-            key={intent.id}
-            className={`px-3 py-2.5 flex items-start gap-2 transition-colors ${
-              checked ? 'bg-neutral-900/60' : 'hover:bg-neutral-950'
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={checked}
-              disabled={!isHost}
-              onChange={() => onToggle(intent.id)}
-              className="mt-1 accent-neutral-100 disabled:cursor-not-allowed"
-            />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <TypeBadge type={intent.type} />
-                <span className="text-[11px] text-neutral-500">
-                  {intent.speakerName} · {(intent.confidence * 100).toFixed(0)}%
-                </span>
+    <div>
+      {/* Live (still-counting) detections, stacked newest on top */}
+      {pending.length > 0 && (
+        <ul className="divide-y divide-neutral-900">
+          {pending.map(({ intent, msLeft, progress }) => (
+            <li key={intent.id} className="relative px-3 py-2.5">
+              {/* Progress bar — depletes from full to empty across the countdown */}
+              <div
+                className="absolute left-0 top-0 h-0.5 bg-neutral-100/70 transition-[width] duration-200 linear"
+                style={{ width: `${progress * 100}%` }}
+                aria-hidden
+              />
+              <div className="flex items-start gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TypeBadge type={intent.type} />
+                    <span className="text-[11px] text-neutral-500">
+                      {intent.speakerName} · {(intent.confidence * 100).toFixed(0)}%
+                    </span>
+                    <span className="text-[10px] text-neutral-500 ml-auto tabular-nums">
+                      {(msLeft / 1000).toFixed(1)}s
+                    </span>
+                  </div>
+                  <div className="text-sm text-neutral-200 leading-snug">{intent.summary}</div>
+                  <div className="text-xs text-neutral-600 mt-1 italic leading-snug">
+                    "{intent.rawText}"
+                  </div>
+                </div>
+                {isHost && (
+                  <button
+                    onClick={() => onRemovePending(intent.id)}
+                    title="Discard"
+                    className="text-neutral-600 hover:text-red-400 text-base leading-none w-5 h-5 flex items-center justify-center"
+                  >
+                    ×
+                  </button>
+                )}
               </div>
-              <div className="text-sm text-neutral-200 leading-snug">{intent.summary}</div>
-              <div className="text-xs text-neutral-600 mt-1 italic leading-snug">
-                "{intent.rawText}"
-              </div>
-            </div>
-            {isHost && (
-              <button
-                onClick={() => onIgnore(intent.id)}
-                title="Remove from context"
-                className="text-neutral-600 hover:text-red-400 text-base leading-none w-5 h-5 flex items-center justify-center"
-              >
-                ×
-              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Composing pool — collapsed by default, expand to see/edit each item */}
+      {pool.length > 0 && (
+        <ComposingPoolCard
+          pool={pool}
+          threshold={threshold}
+          composing={composing}
+          onRemoveFromPool={onRemoveFromPool}
+          isHost={isHost}
+        />
+      )}
+
+      {composing && pool.length === 0 && (
+        <div className="px-4 py-3 text-xs text-neutral-500 flex items-center gap-2">
+          <span className="inline-block w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
+          Composing decision…
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ComposingPoolCard({
+  pool,
+  threshold,
+  composing,
+  onRemoveFromPool,
+  isHost,
+}: {
+  pool: DetectedIntent[];
+  threshold: number;
+  composing: boolean;
+  onRemoveFromPool: (intentId: string) => void;
+  isHost: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const pct = Math.min(100, Math.round((pool.length / threshold) * 100));
+
+  return (
+    <div className="border-t border-neutral-900 bg-neutral-950">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-neutral-900/40 transition-colors"
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-xs uppercase tracking-widest text-neutral-500">
+              Composing decision
+            </span>
+            <span className="text-xs text-neutral-400 tabular-nums">
+              {pool.length} / {threshold}
+            </span>
+            {composing && (
+              <span className="text-[10px] text-blue-400">submitting…</span>
             )}
-          </li>
-        );
-      })}
-    </ul>
+          </div>
+          <div className="h-1 rounded-full bg-neutral-900 overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 transition-[width] duration-300"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+        <span className="text-xs text-neutral-500">
+          {expanded ? '−' : '+'}
+        </span>
+      </button>
+      {expanded && (
+        <ul className="divide-y divide-neutral-900 border-t border-neutral-900">
+          {pool.map((intent) => (
+            <li key={intent.id} className="px-3 py-2 flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <TypeBadge type={intent.type} />
+                  <span className="text-[10px] text-neutral-500">
+                    {intent.speakerName}
+                  </span>
+                </div>
+                <div className="text-xs text-neutral-300 leading-snug">{intent.summary}</div>
+              </div>
+              {isHost && (
+                <button
+                  onClick={() => onRemoveFromPool(intent.id)}
+                  title="Remove from this decision"
+                  className="text-neutral-600 hover:text-red-400 text-base leading-none w-5 h-5 flex items-center justify-center"
+                >
+                  ×
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
