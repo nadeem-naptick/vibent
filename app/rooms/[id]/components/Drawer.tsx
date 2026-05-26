@@ -14,7 +14,7 @@ type Props = {
   type: DrawerType | null;
   onClose: () => void;
   roomId: string;
-  room: Room | { title: string; objective: string; outputType: string; context: unknown };
+  room: Room | { title: string; objective: string | null; outputType: string | null; context: unknown };
   transcripts: TranscriptSegment[];
   intents: DetectedIntent[];
   tasks: LiveTask[];
@@ -368,17 +368,19 @@ function DiffKind({ kind }: { kind: VersionDiff['kind'] }) {
 
 function ContextContent({ room }: { room: Props['room'] }) {
   const ctx = (room.context ?? {}) as Record<string, unknown>;
-  const entries: [string, string][] = [
-    ['Title', room.title],
-    [
+  const entries: [string, string][] = [['Title', room.title]];
+  if (room.objective) {
+    entries.push([
       'Objective',
-      (OBJECTIVE_LABELS as Record<string, string>)[room.objective] ?? room.objective,
-    ],
-    [
+      OBJECTIVE_LABELS[room.objective] ?? room.objective,
+    ]);
+  }
+  if (room.outputType) {
+    entries.push([
       'Output',
-      (OUTPUT_TYPE_LABELS as Record<string, string>)[room.outputType] ?? room.outputType,
-    ],
-  ];
+      OUTPUT_TYPE_LABELS[room.outputType] ?? room.outputType,
+    ]);
+  }
   for (const [k, v] of Object.entries(ctx)) {
     if (!v) continue;
     entries.push([

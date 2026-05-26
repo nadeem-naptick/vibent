@@ -12,6 +12,7 @@ import {
   type TranscriptSegment,
 } from '@/lib/db/mongo';
 import { classifyUtterance } from '@/lib/intel/classify';
+import { getTemplate } from '@/lib/templates';
 
 // Persist a transcript segment. If it's a final result, run the intelligence
 // classifier inline and persist the resulting intent. Return the intent so the
@@ -84,6 +85,7 @@ export async function POST(req: Request) {
       text: segment.text,
       speakerName: segment.speakerName,
       roomObjective: room?.objective,
+      template: getTemplate(room?.templateId),
       recentContext,
     });
 

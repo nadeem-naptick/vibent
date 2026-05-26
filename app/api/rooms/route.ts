@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
-import { rooms, participants, type RoomContext } from '@/lib/db/schema';
+import { rooms, participants } from '@/lib/db/schema';
 import { getTemplate } from '@/lib/templates';
 import { provisionRoomSandbox } from '@/lib/sandbox/room-sandbox';
 
@@ -17,40 +17,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'invalid body' }, { status: 400 });
   }
 
-  const {
-    title,
-    objective,
-    outputType,
-    templateId,
-    context,
-  } = body as {
+  const { title, templateId, instructions } = body as {
     title?: string;
-    objective?: string;
-    outputType?: string;
     templateId?: string;
-    context?: RoomContext;
+    instructions?: string;
   };
 
-  if (!title || !objective || !outputType) {
+  if (!title || !templateId) {
     return NextResponse.json(
-      { error: 'title, objective, outputType are required' },
+      { error: 'title and templateId are required' },
       { status: 400 },
     );
   }
 
-  // Validate template if provided
-  const template = templateId ? getTemplate(templateId) : undefined;
+  const template = getTemplate(templateId);
+  if (!template) {
+    return NextResponse.json({ error: 'unknown templateId' }, { status: 400 });
+  }
+
+  const trimmedInstructions = instructions?.trim() || null;
 
   // 1. Insert room as provisioning
   const [room] = await db
     .insert(rooms)
     .values({
       title,
-      objective: objective as never,
-      outputType: outputType as never,
-      templateId: template?.id ?? null,
+      templateId: template.id,
+      instructions: trimmedInstructions,
       hostUserId: session.user.id,
-      context: context ?? {},
       status: 'provisioning',
     })
     .returning();

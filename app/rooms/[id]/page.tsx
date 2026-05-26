@@ -5,7 +5,6 @@ import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { rooms, participants } from '@/lib/db/schema';
 import { mintLiveKitToken, publicLiveKitUrl } from '@/lib/livekit';
-import { OBJECTIVE_LABELS } from '@/lib/templates';
 import {
   ensureIndexes,
   getIntentsCollection,
@@ -111,6 +110,8 @@ export default async function RoomPage({
         objective: liveRoom.objective,
         outputType: liveRoom.outputType,
         context: liveRoom.context,
+        templateId: liveRoom.templateId,
+        instructions: liveRoom.instructions,
       }}
     />
   );

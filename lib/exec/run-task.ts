@@ -14,7 +14,7 @@ import { provisionRoomSandbox } from '@/lib/sandbox/room-sandbox';
 import { db as dbForRetry } from '@/lib/db';
 import { rooms as roomsForRetry } from '@/lib/db/schema';
 import { eq as eqForRetry } from 'drizzle-orm';
-import { OBJECTIVE_LABELS, OUTPUT_TYPE_LABELS } from '@/lib/templates';
+import { getTemplate } from '@/lib/templates';
 
 // ---------------------------------------------------------------------------
 // Provider selection — modular, defaults to Gemini 2.5 Pro for coding.
@@ -70,18 +70,38 @@ function execProviderOptions(provider: ExecProvider, thinkingOn: boolean) {
 // ---------------------------------------------------------------------------
 
 function buildSystemPrompt(room: typeof rooms.$inferSelect) {
+  const template = getTemplate(room.templateId);
+
+  // Artifact kind — prefer template metadata, fall back to legacy enum strings.
+  const artifactKind =
+    template?.artifactKind ??
+    (room.objective ? String(room.objective).replace(/_/g, ' ') : 'digital artifact');
+
+  // Template-specific structural conventions (the heart of the template system).
+  const artifactDirectionBlock = template
+    ? `\n\n# Artifact direction (${template.artifactKind})\n${template.executorAddendum}\n`
+    : '';
+
+  // Free-form host instructions written at room creation. Treated as the
+  // most authoritative project context — appended verbatim.
+  const instructionsBlock = room.instructions?.trim()
+    ? `\n\n# Host instructions\n${room.instructions.trim()}\n`
+    : '';
+
+  // Legacy structured context (audience/tone/brand colors) — kept for
+  // back-compat with rooms created before the templates redesign.
   const ctx = (room.context ?? {}) as Record<string, unknown>;
   const contextLines: string[] = [];
   for (const [k, v] of Object.entries(ctx)) {
     if (!v) continue;
     contextLines.push(`- ${k}: ${Array.isArray(v) ? v.join(', ') : String(v)}`);
   }
+  const legacyContextBlock =
+    contextLines.length > 0 ? `\n\n# Legacy project context\n${contextLines.join('\n')}\n` : '';
+
   return `You are the **execution agent** for a live collaborative product-design room called "${room.title}".
 
-The team is iteratively shaping a React + Vite + Tailwind artifact (a ${OBJECTIVE_LABELS[room.objective] ?? room.objective}, output as ${OUTPUT_TYPE_LABELS[room.outputType] ?? room.outputType}). A separate intelligence layer has watched their discussion, the host has approved a specific change, and your job is to apply ONLY that change to the project files in the sandbox.
-
-# Project context
-${contextLines.length > 0 ? contextLines.join('\n') : '(no additional context provided)'}
+The team is iteratively shaping a React + Vite + Tailwind artifact (a ${artifactKind}). A separate intelligence layer has watched their discussion, the host has approved a specific change, and your job is to apply ONLY that change to the project files in the sandbox.${artifactDirectionBlock}${instructionsBlock}${legacyContextBlock}
 
 # Project structure
 The sandbox runs a Vite React + TypeScript template at the project root. Key files:

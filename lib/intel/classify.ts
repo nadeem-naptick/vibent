@@ -4,6 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import { google } from '@ai-sdk/google';
 import { groq } from '@ai-sdk/groq';
 import { z } from 'zod';
+import type { Template } from '@/lib/templates';
 
 // ---------------------------------------------------------------------------
 // Modular provider selection — swap models via env without changing callers.
@@ -68,7 +69,8 @@ export type ClassifiedIntent = z.infer<typeof IntentSchema>;
 type ClassifyInput = {
   text: string;
   speakerName: string;
-  roomObjective?: string;
+  roomObjective?: string | null;
+  template?: Template | null;
   recentContext?: string;
   provider?: IntelProvider;
 };
@@ -77,6 +79,7 @@ export async function classifyUtterance({
   text,
   speakerName,
   roomObjective,
+  template,
   recentContext,
   provider,
 }: ClassifyInput): Promise<ClassifiedIntent> {
@@ -84,7 +87,7 @@ export async function classifyUtterance({
     model: resolveModel(provider),
     schema: IntentSchema,
     temperature: 0.2,
-    prompt: buildPrompt({ text, speakerName, roomObjective, recentContext }),
+    prompt: buildPrompt({ text, speakerName, roomObjective, template, recentContext }),
   });
   return object;
 }
@@ -94,28 +97,40 @@ export async function classifyUtterance({
 // ---------------------------------------------------------------------------
 
 type ComposeInput = {
-  roomObjective?: string;
+  roomObjective?: string | null;
+  template?: Template | null;
   detections: Array<{ type: string; summary: string; rawText: string; speakerName: string }>;
   provider?: IntelProvider;
 };
 
 export async function composeDecision({
   roomObjective,
+  template,
   detections,
   provider,
 }: ComposeInput): Promise<string> {
+  const artifactPhrase = template
+    ? `a ${template.artifactKind}`
+    : roomObjective
+      ? `a ${roomObjective}`
+      : 'a digital artifact';
+
+  const decisionHintBlock = template
+    ? `\n\nVocabulary for this kind of artifact: ${template.decisionHint}\n`
+    : '';
+
   const { object } = await generateObject({
     model: resolveModel(provider),
     schema: z.object({ instruction: z.string().min(2).max(1500) }),
     temperature: 0.3,
     prompt: `You're helping a product team turn raw discussion fragments into ONE clear, actionable instruction for a code-editing agent.
 
-The team is shaping ${roomObjective ? `a ${roomObjective}` : 'a digital artifact'}. The host has hand-picked the following detections from their discussion as the ones that matter:
+The team is shaping ${artifactPhrase}. The host has hand-picked the following detections from their discussion as the ones that matter:
 
 ${detections
   .map((d, i) => `${i + 1}. [${d.type}] ${d.speakerName}: "${d.rawText}" (gist: ${d.summary})`)
   .join('\n')}
-
+${decisionHintBlock}
 Compose a single, concrete instruction (2-5 sentences) that an executing agent could act on directly. Treat constraints and ideas as guardrails. Treat instructions and decisions as the primary intent. Drop anything that's a question or off-topic. Speak in second-person imperative ("Add…", "Change…", "Remove…"). Do NOT include explanations or justifications — just the instruction itself.`,
   });
   return object.instruction;
@@ -125,14 +140,21 @@ function buildPrompt({
   text,
   speakerName,
   roomObjective,
+  template,
   recentContext,
 }: {
   text: string;
   speakerName: string;
-  roomObjective?: string;
+  roomObjective?: string | null;
+  template?: Template | null;
   recentContext?: string;
 }) {
-  return `You are watching a live product/design meeting where a team is iteratively shaping a digital artifact (${roomObjective ?? 'a digital product'}). Your job is to classify each new utterance the speaker makes so the room's AI panel can show relevant signals to the host.
+  const artifactPhrase = template?.artifactKind ?? roomObjective ?? 'a digital product';
+  const templateHintBlock = template
+    ? `\n\n# Artifact-specific vocabulary\n${template.classifierHint}\n`
+    : '';
+
+  return `You are watching a live product/design meeting where a team is iteratively shaping a digital artifact (${artifactPhrase}). Your job is to classify each new utterance the speaker makes so the room's AI panel can show relevant signals to the host.${templateHintBlock}
 
 # Categories
 - idea — a suggestion, may or may not be acted on

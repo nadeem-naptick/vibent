@@ -5,7 +5,7 @@ import { Plus, Sparkles, Layers3 } from 'lucide-react';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { rooms } from '@/lib/db/schema';
-import { OBJECTIVE_LABELS } from '@/lib/templates';
+import { OBJECTIVE_LABELS, getTemplate } from '@/lib/templates';
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import { DeleteRoomButton } from '@/components/DeleteRoomButton';
 import { AtmosphericBackground } from '@/components/AtmosphericBackground';
@@ -80,7 +80,8 @@ export default async function DashboardPage() {
                 key={room.id}
                 roomId={room.id}
                 title={room.title}
-                objectiveLabel={OBJECTIVE_LABELS[room.objective]}
+                templateId={room.templateId}
+                objectiveLabel={room.objective ? OBJECTIVE_LABELS[room.objective] : null}
                 createdAt={room.createdAt}
                 status={room.status}
               />
@@ -119,26 +120,40 @@ function EmptyState() {
 function RoomCard({
   roomId,
   title,
+  templateId,
   objectiveLabel,
   createdAt,
   status,
 }: {
   roomId: string;
   title: string;
-  objectiveLabel: string;
+  templateId: string | null;
+  objectiveLabel: string | null;
   createdAt: Date;
   status: string;
 }) {
+  const template = getTemplate(templateId);
+  const Icon = template?.icon ?? Layers3;
+  const kindLabel = template?.artifactKind ?? objectiveLabel;
   return (
     <li className="group relative rounded-2xl border border-white/8 bg-slate-900/50 backdrop-blur-xl hover:border-white/20 hover:bg-slate-900/80 transition-all">
       <Link href={`/rooms/${roomId}`} className="block px-5 py-4">
         <div className="flex items-center justify-between gap-4 pr-16">
-          <div className="space-y-1.5 min-w-0">
-            <div className="font-semibold truncate text-base">{title}</div>
-            <div className="text-xs text-white/45 flex items-center gap-2">
-              <span>{objectiveLabel}</span>
-              <span className="text-white/20">·</span>
-              <span>{formatDate(createdAt)}</span>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/[0.05] border border-white/8 text-white/70">
+              <Icon size={18} strokeWidth={1.8} />
+            </div>
+            <div className="space-y-1 min-w-0">
+              <div className="font-semibold truncate text-base">{title}</div>
+              <div className="text-xs text-white/45 flex items-center gap-2">
+                {kindLabel && (
+                  <>
+                    <span className="capitalize">{kindLabel}</span>
+                    <span className="text-white/20">·</span>
+                  </>
+                )}
+                <span>{formatDate(createdAt)}</span>
+              </div>
             </div>
           </div>
           <StatusBadge status={status} />

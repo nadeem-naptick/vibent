@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, Sparkles, Mic } from 'lucide-react';
+import { getTemplate } from '@/lib/templates';
 import type { DeviceFrame } from '../useSettings';
 
 type Props = {
@@ -10,13 +11,25 @@ type Props = {
   iframeKey: string;
   deviceFrame: DeviceFrame;
   roomId: string;
+  templateId: string | null;
+  hasFirstVersion: boolean;
 };
 
 const FRAME_WIDTH = '390px';
 const FRAME_HEIGHT = '844px';
 
-export function Canvas({ sandboxUrl, status, iframeKey, deviceFrame, roomId }: Props) {
+export function Canvas({
+  sandboxUrl,
+  status,
+  iframeKey,
+  deviceFrame,
+  roomId,
+  templateId,
+  hasFirstVersion,
+}: Props) {
   const isMobile = deviceFrame === 'mobile';
+  const template = getTemplate(templateId);
+  const showEmptyState = !!sandboxUrl && !!template && !hasFirstVersion;
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-[#05070A] overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(79,140,255,.10),transparent_36%),radial-gradient(circle_at_72%_35%,rgba(255,184,107,.06),transparent_30%),#05070A]" />
@@ -43,13 +56,16 @@ export function Canvas({ sandboxUrl, status, iframeKey, deviceFrame, roomId }: P
           }}
         >
           {sandboxUrl ? (
-            <iframe
-              key={iframeKey}
-              src={sandboxUrl}
-              className="h-full w-full border-0 bg-white"
-              title="Room artifact preview"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            />
+            <>
+              <iframe
+                key={iframeKey}
+                src={sandboxUrl}
+                className="h-full w-full border-0 bg-white"
+                title="Room artifact preview"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              />
+              {showEmptyState && template && <EmptyStateOverlay template={template} />}
+            </>
           ) : status === 'error' ? (
             <PreviewError roomId={roomId} />
           ) : (
@@ -142,6 +158,46 @@ function PreviewError({ roomId }: { roomId: string }) {
         >
           {recreating ? 'Recreating…' : 'Recreate sandbox'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EmptyStateOverlay — sits over the iframe before the first task completes.
+// Tells the user (in template-specific copy) what kind of artifact this room
+// is for and how to start. Vanishes after first successful version.
+// ---------------------------------------------------------------------------
+
+function EmptyStateOverlay({
+  template,
+}: {
+  template: ReturnType<typeof getTemplate>;
+}) {
+  if (!template) return null;
+  const Icon = template.icon;
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gradient-to-b from-[#05070A]/95 via-[#05070A]/90 to-[#05070A]/95 backdrop-blur-md">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(79,140,255,.18),transparent_55%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(168,85,247,.08),transparent_45%)]" />
+      <div className="relative max-w-xl px-10 text-center">
+        <div className="mx-auto mb-6 grid h-14 w-14 place-items-center rounded-2xl bg-white/[0.04] border border-white/10 shadow-[0_20px_60px_rgba(79,140,255,0.25)]">
+          <Icon size={26} strokeWidth={1.8} className="text-blue-200" />
+        </div>
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-white/55">
+          <Sparkles size={11} className="text-amber-200" />
+          {template.artifactKind}
+        </div>
+        <h1 className="mt-5 text-3xl font-semibold tracking-tight text-white leading-tight">
+          {template.emptyStateTitle}
+        </h1>
+        <p className="mt-4 text-base text-white/65 leading-relaxed">
+          {template.emptyStateBody}
+        </p>
+        <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-500/10 px-4 py-2 text-sm text-blue-100">
+          <Mic size={14} className="text-blue-200" />
+          Start talking — every decision lands here.
+        </div>
       </div>
     </div>
   );

@@ -36,6 +36,13 @@
       "when": 1779747657970,
       "tag": "0004_curious_moondragon",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779802144696,
+      "tag": "0005_templates_redesign",
+      "breakpoints": true
     }
   ]
 }

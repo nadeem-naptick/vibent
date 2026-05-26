@@ -35,7 +35,7 @@ type Props = {
   isHost: boolean;
   speakerName: string;
   initialFeed: RoomFeed;
-  room: Pick<Room, 'title' | 'objective' | 'outputType' | 'context'>;
+  room: Pick<Room, 'title' | 'objective' | 'outputType' | 'context' | 'templateId' | 'instructions'>;
 };
 
 type RestoreMode = 'reattach' | 'restore' | 'unknown' | 'ready' | 'error';
@@ -316,6 +316,8 @@ function RoomShell({
         iframeKey={iframeKey}
         deviceFrame={settings.deviceFrame}
         roomId={roomId}
+        templateId={room.templateId}
+        hasFirstVersion={feed.versions.length > 0}
       />
 
       {focusMode ? (

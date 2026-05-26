@@ -115,9 +115,14 @@ export const rooms = pgTable('rooms', {
     .primaryKey()
     .$defaultFn(() => nanoid(12)),
   title: text('title').notNull(),
-  objective: roomObjectiveEnum('objective').notNull(),
-  outputType: roomOutputTypeEnum('output_type').notNull(),
+  // Legacy enum context — kept nullable for back-compat. New rooms drive
+  // artifact decisions entirely off templateId + instructions instead.
+  objective: roomObjectiveEnum('objective'),
+  outputType: roomOutputTypeEnum('output_type'),
   templateId: text('template_id'),
+  // Optional free-form instructions the host writes at creation time.
+  // Appended to the executor's system prompt for the first task.
+  instructions: text('instructions'),
   hostUserId: text('host_user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),

@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 import { rooms } from '@/lib/db/schema';
 import { getIntentsCollection } from '@/lib/db/mongo';
 import { composeDecision } from '@/lib/intel/classify';
+import { getTemplate } from '@/lib/templates';
 
 // Take a set of detection (intent) IDs the host selected, pull the originals
 // from Mongo, and ask the intel model to merge them into a single instruction
@@ -42,6 +43,7 @@ export async function POST(req: Request) {
   try {
     const instruction = await composeDecision({
       roomObjective: room.objective,
+      template: getTemplate(room.templateId),
       detections: docs.map((d) => ({
         type: d.type,
         summary: d.summary,
