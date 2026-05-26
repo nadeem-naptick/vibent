@@ -71,19 +71,12 @@ sudo systemctl enable --now vibent-tunnel.service
 
 ## Update flow (when shipping new code)
 
-The "build locally, rsync to box, don't build in place" pattern still applies
-— a t3.medium can't run `npm ci` + `next build` without OOMing, even with
-swap. The swap only protects the runtime, not heavy builds.
-
 ```bash
-# locally
-npm ci
-npm run build
-rsync -av --delete --exclude=node_modules --exclude=.git --exclude=.env \
-  .next package.json package-lock.json next.config.* tsconfig.json \
-  drizzle public app components lib hooks types middleware.ts \
-  naptick-uat:/home/ubuntu/vibent/
-
-# on the box
-ssh naptick-uat 'cd ~/vibent && npm ci --omit=dev && pm2 restart vibent-agentic'
+bash deploy/deploy.sh           # safe deploy — refuses if working tree is dirty
+bash deploy/deploy.sh --dirty   # deploy uncommitted WIP anyway
 ```
+
+That runs the full flow: master-branch check → local build → rsync → remote
+`npm ci --omit=dev` → `pm2 restart vibent-agentic` → prints the current
+tunnel URL. The build runs *locally* because t3.medium OOMs trying to do
+`next build` in place — the swap protects the runtime, not heavy builds.
