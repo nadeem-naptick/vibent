@@ -1,0 +1,15 @@
+[Unit]
+Description=Vibent Cloudflare quick tunnel (auto-updates NEXTAUTH_URL)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Environment=HOME=/home/ubuntu
+ExecStart=/home/ubuntu/vibent-tunnel.sh
+Restart=on-failure
+RestartSec=8
+
+[Install]
+WantedBy=multi-user.target
