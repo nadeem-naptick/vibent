@@ -242,7 +242,7 @@ function RoomShell({
   const connectionState = useConnectionState();
   const sttEnabled = connectionState === ConnectionState.Connected;
 
-  const { feed, updateIntent, addLocalTranscript, addLocalIntent, lastCompletedTaskId } =
+  const { feed, updateIntent, addLocalTranscript, addLocalIntent, completedTaskCount } =
     useRoomFeed(initialFeed, roomId);
 
   const { settings, update: updateSettings, limits: thresholdLimits } = useSettings();
@@ -272,11 +272,12 @@ function RoomShell({
   });
 
   // Iframe refresh on task completion (Vite HMR handles most cases but this
-  // forces a hard reload as a safety net).
+  // forces a hard reload as a safety net). Triggered by completedTaskCount
+  // so every new completion bumps it, not just the first one.
   const [iframeNonce, setIframeNonce] = useState(0);
   useEffect(() => {
-    if (lastCompletedTaskId) setIframeNonce((n) => n + 1);
-  }, [lastCompletedTaskId]);
+    if (completedTaskCount > 0) setIframeNonce((n) => n + 1);
+  }, [completedTaskCount]);
   const [rollbackNonce, setRollbackNonce] = useState(0);
   const iframeKey = `${sandboxUrl ?? 'none'}#${iframeNonce}#${rollbackNonce}`;
 
@@ -317,7 +318,7 @@ function RoomShell({
         deviceFrame={settings.deviceFrame}
         roomId={roomId}
         templateId={room.templateId}
-        hasFirstVersion={feed.versions.length > 0}
+        hasFirstVersion={feed.versions.length > 0 || completedTaskCount > 0}
       />
 
       {focusMode ? (

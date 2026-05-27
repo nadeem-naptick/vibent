@@ -43,6 +43,13 @@
       "when": 1779802144696,
       "tag": "0005_templates_redesign",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779887001547,
+      "tag": "0006_shares",
+      "breakpoints": true
     }
   ]
 }

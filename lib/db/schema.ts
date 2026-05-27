@@ -236,3 +236,33 @@ export const versions = pgTable('versions', {
 
 export type Version = typeof versions.$inferSelect;
 export type NewVersion = typeof versions.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Shares — public, externally-shareable URLs to a built snapshot of the room
+// at a moment in time. Each share is its own immutable build pushed to S3.
+// ---------------------------------------------------------------------------
+
+export const shares = pgTable('shares', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => nanoid()),
+  // URL-safe slug used in the public share URL.
+  slug: text('slug').notNull().unique(),
+  roomId: text('room_id')
+    .notNull()
+    .references(() => rooms.id, { onDelete: 'cascade' }),
+  // Source version this share was built from. Nullable so a share can be
+  // created from the live sandbox before a version is persisted.
+  versionId: text('version_id'),
+  createdBy: text('created_by')
+    .notNull()
+    .references(() => users.id),
+  // S3 key prefix (bucket comes from env), e.g. "shares/abc123/".
+  s3Prefix: text('s3_prefix').notNull(),
+  fileCount: integer('file_count').notNull(),
+  totalBytes: integer('total_bytes').notNull(),
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+});
+
+export type Share = typeof shares.$inferSelect;
+export type NewShare = typeof shares.$inferInsert;

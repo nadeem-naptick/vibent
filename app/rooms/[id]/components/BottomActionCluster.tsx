@@ -1,7 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Settings2, Maximize2, Download, Focus } from 'lucide-react';
+import {
+  Settings2,
+  Maximize2,
+  Download,
+  Focus,
+  Share2,
+  Copy,
+  CheckCircle2,
+  Loader2,
+  X,
+  ExternalLink,
+} from 'lucide-react';
 import type { RoomSettings } from '../useSettings';
 import { PillButton } from './PillButton';
 
@@ -46,10 +57,74 @@ export function BottomActionCluster({
     }
   }
 
-  function downloadExport() {
-    // Placeholder hook — M5 wires real ZIP export. For now open the latest
-    // version snapshot directly in a new tab as JSON, so the user has something.
-    window.open(`/api/rooms/${roomId}/versions`, '_blank');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  async function downloadExport() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/export`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      // Pull suggested filename from Content-Disposition; fall back to a default.
+      const cd = res.headers.get('content-disposition') ?? '';
+      const m = cd.match(/filename="([^"]+)"/);
+      const filename = m?.[1] ?? 'vibent-export.zip';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'export failed';
+      setExportError(msg);
+      console.error('[export]', msg);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const [shareOpen, setShareOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  async function openShare() {
+    setShareOpen(true);
+    if (shareUrl) return; // already built this session — show existing URL
+    setSharing(true);
+    setShareError(null);
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/share`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+      }
+      setShareUrl(data.url);
+    } catch (err) {
+      setShareError(err instanceof Error ? err.message : 'share failed');
+    } finally {
+      setSharing(false);
+    }
+  }
+  async function copyShareUrl() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard API may fail in iframes — silently ignore
+    }
+  }
+  function closeShare() {
+    setShareOpen(false);
   }
 
   return (
@@ -96,12 +171,138 @@ export function BottomActionCluster({
       <PillButton icon={Maximize2} title="Fullscreen" onClick={toggleFullscreen} />
 
       <PillButton
-        icon={Download}
-        label="Export"
-        title="Export project"
+        icon={Share2}
+        label="Share"
+        title="Build + share a public URL of the current artifact"
+        onClick={openShare}
+      />
+
+      <PillButton
+        icon={exporting ? Loader2 : Download}
+        label={exporting ? 'Building…' : 'Export'}
+        title="Build the project and download a ZIP of the static site"
         onClick={downloadExport}
         variant="primary"
       />
+
+      {exportError && (
+        <div className="absolute bottom-full right-0 mb-2 max-w-sm rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-200 backdrop-blur-xl">
+          {exportError}
+        </div>
+      )}
+
+      {shareOpen && (
+        <ShareModal
+          sharing={sharing}
+          url={shareUrl}
+          error={shareError}
+          copied={copied}
+          onCopy={copyShareUrl}
+          onClose={closeShare}
+        />
+      )}
+    </div>
+  );
+}
+
+function ShareModal({
+  sharing,
+  url,
+  error,
+  copied,
+  onCopy,
+  onClose,
+}: {
+  sharing: boolean;
+  url: string | null;
+  error: string | null;
+  copied: boolean;
+  onCopy: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-lg rounded-3xl border border-white/10 bg-[#0B0F14]/95 p-6 shadow-2xl backdrop-blur-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 text-white/45 hover:text-white"
+        >
+          <X size={18} />
+        </button>
+
+        <h2 className="text-lg font-semibold text-white">Share this artifact</h2>
+        <p className="mt-1 text-sm text-white/55">
+          A permanent public link to a built snapshot of your current page.
+          Anyone with the link can view it — no sign-in needed.
+        </p>
+
+        <div className="mt-5">
+          {sharing && (
+            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
+              <Loader2 size={18} className="text-blue-300 animate-spin" />
+              <div className="text-sm text-white/75">
+                Building & uploading…{' '}
+                <span className="text-white/45">~20-40 seconds</span>
+              </div>
+            </div>
+          )}
+
+          {error && !sharing && (
+            <div className="rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {error}
+            </div>
+          )}
+
+          {url && !sharing && (
+            <>
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+                <input
+                  readOnly
+                  value={url}
+                  onFocus={(e) => e.target.select()}
+                  className="flex-1 bg-transparent text-sm text-white outline-none truncate"
+                />
+                <button
+                  onClick={onCopy}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/15 px-3 py-1.5 text-xs font-semibold text-white"
+                >
+                  {copied ? (
+                    <>
+                      <CheckCircle2 size={13} className="text-emerald-300" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={13} />
+                      Copy
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="mt-3 flex items-center justify-between text-xs">
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-blue-300 hover:text-blue-200"
+                >
+                  <ExternalLink size={13} />
+                  Open in new tab
+                </a>
+                <span className="text-white/40">
+                  Built from your current artifact · doesn&apos;t auto-update
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

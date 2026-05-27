@@ -8,6 +8,7 @@ import { db } from '@/lib/db';
 import { rooms, tasks, type TaskEvent } from '@/lib/db/schema';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
 import { createSandboxTools, SandboxLostError, checkPreview } from './sandbox-tools';
+import { createWebTools } from './web-tools';
 import { createVersion } from '@/lib/snapshots/manager';
 import { sandboxManager as sandboxManagerForRetry } from '@/lib/sandbox/sandbox-manager';
 import { provisionRoomSandbox } from '@/lib/sandbox/room-sandbox';
@@ -104,10 +105,10 @@ function buildSystemPrompt(room: typeof rooms.$inferSelect) {
 The team is iteratively shaping a React + Vite + Tailwind artifact (a ${artifactKind}). A separate intelligence layer has watched their discussion, the host has approved a specific change, and your job is to apply ONLY that change to the project files in the sandbox.${artifactDirectionBlock}${instructionsBlock}${legacyContextBlock}
 
 # Project structure
-The sandbox runs a Vite React + TypeScript template at the project root. Key files:
-- src/App.tsx — main component, rendered at /
-- src/main.tsx — entry point
-- src/components/ — for new components
+The sandbox runs a Vite + React (JavaScript, NOT TypeScript) template. Use the **.jsx** extension for all components — never .tsx. Key files:
+- src/App.jsx — main component, rendered at /
+- src/main.jsx — entry point
+- src/components/ — for new components (also .jsx)
 - index.html — root HTML
 Vite has HMR enabled, so any file you write triggers an immediate reload in the user's preview iframe.
 
@@ -125,10 +126,22 @@ Vite has HMR enabled, so any file you write triggers an immediate reload in the 
 # Avoiding white screens — common causes
 - Removed or missing import that your new JSX references
 - Syntax error in JSX (unclosed tag, stray brace)
-- Wrong file extension (writing src/App.jsx when project uses src/App.tsx)
-- Accidentally deleted the \`<App />\` render in main.tsx or the \`<div id="root">\` in index.html
+- Wrong file extension (writing .tsx when the project uses .jsx)
+- Accidentally deleted the \`<App />\` render in main.jsx or the \`<div id="root">\` in index.html
 - Importing a component file you forgot to create
-If check_preview shows a Vite error, the fix is almost always in the file mentioned in the error.
+- Wrong relative path in an import (./hero vs ./Hero, case matters)
+
+## Fixing a white screen — DO THIS, NOT THAT
+**check_preview's \`brokenModules\` array tells you exactly which file the browser couldn't load.** If it lists \`/src/components/Hero.jsx\` returning 404, the fix is to create or rename that one file — nothing else.
+
+**NEVER replace App.jsx with a placeholder ("Hello, Vite is rendering" or similar) to "fix" a white screen.** That just hides the problem and destroys the user's work. The user has 17 components they built up; do not throw them away to get the page to render.
+
+Instead, when the preview is broken:
+1. Read \`brokenModules\` in the check_preview result
+2. For each broken module, read_file the importer to see what path it expected
+3. Either create the missing file OR fix the import path in the importer
+4. call check_preview again
+5. Repeat — never wipe and start over
 
 # What NOT to do
 - Don't change unrelated files.
@@ -136,7 +149,25 @@ If check_preview shows a Vite error, the fix is almost always in the file mentio
 - Don't write tests unless the instruction asks for them.
 - Don't run \`npm run dev\` or \`npm run build\` — they're not needed.
 
-You have these tools: list_files, read_file, write_file, install_packages, run_command, check_preview.`;
+# Web research tools
+You also have access to the public internet via these tools:
+- \`web_search(query, limit)\` — search the web; returns top results with title + URL + description.
+- \`fetch_url(url)\` — fetch a specific page as Markdown (main content only, truncated to ~8000 chars).
+
+Use them when the task references real-world content you need to ground in:
+- A named company / product / website ("make it look like Linear's pricing" → fetch linear.com/pricing first)
+- Live facts, numbers, or copy you don't have
+- Brand colors, taglines, or layout patterns from a reference site
+- Real data to seed placeholder content with
+
+Do NOT use them for:
+- Inventing data when reasonable placeholders are fine
+- Speculative research not tied to the specific task
+- Simple UI tweaks ("make the button blue") — no research needed
+
+Each call costs real money and takes 2-15 seconds. Be specific in your queries and don't chain more than 2-3 calls per task.
+
+You have these tools: list_files, read_file, write_file, install_packages, run_command, check_preview, web_search, fetch_url.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +228,10 @@ export async function runTask(taskId: string): Promise<void> {
     .where(eq(tasks.id, task.id));
 
   const events: TaskEvent[] = [];
-  const tools = createSandboxTools(sandbox, room.sandboxUrl ?? '');
+  const tools = {
+    ...createSandboxTools(sandbox, room.sandboxUrl ?? ''),
+    ...createWebTools(),
+  };
 
   // Register abort controller so /api/tasks/[id]/cancel can stop us
   const abortController = new AbortController();

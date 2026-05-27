@@ -166,6 +166,9 @@ export type PreviewCheck = {
   bodyPreview: string;
   viteLog: string;
   reasons: string[];
+  // Each user-source module the import graph walk found broken (404/500
+  // from Vite, or fetch error). Empty array means the import chain is OK.
+  brokenModules: { path: string; status: number; preview: string }[];
 };
 
 // Combined health check the agent (and the post-task verifier) can use to
@@ -182,6 +185,7 @@ export async function checkPreview(
   let bodyPreview = '';
   let bodyHasErrorMarkup = false;
   let mainModuleOk = true;
+  let entryPath: string | undefined;
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 8000);
@@ -204,7 +208,7 @@ export async function checkPreview(
     // module fails to transform, Vite returns 500 with the error text. Probe
     // both common entry points.
     const entryMatch = body.match(/src=["'](\/[^"']*main\.(?:tsx|jsx|ts|js))["']/);
-    const entryPath = entryMatch?.[1];
+    entryPath = entryMatch?.[1];
     if (entryPath) {
       try {
         const ctrl2 = new AbortController();
@@ -230,7 +234,85 @@ export async function checkPreview(
     reasons.push(`URL fetch failed: ${errMsg(err)}`);
   }
 
-  // 2. Tail recent Vite log lines (only available if Vite was started with
+  // 2. Walk the import graph from the entry module.
+  //
+  // The biggest blind spot in a Vite + React preview is *runtime* import
+  // failure: App.jsx imports ./components/Hero.jsx, but Hero.jsx doesn't
+  // exist (typo / wrong extension / missing file). Vite serves App.jsx
+  // happily; the browser fails when it tries to resolve the missing path,
+  // throws in console, renders nothing → white screen. The vite.log doesn't
+  // see it because Vite served the request fine.
+  //
+  // Simulating the browser: fetch each transitively-imported user-source
+  // module and record any that 404/500. Cap depth + total fetches so a
+  // wide graph doesn't blow the time budget.
+  const brokenModules: { path: string; status: number; preview: string }[] = [];
+  if (entryPath && mainModuleOk) {
+    const MAX_DEPTH = 3;
+    const MAX_FETCHES = 25;
+    const visited = new Set<string>([entryPath]);
+    const queue: { path: string; depth: number }[] = [{ path: entryPath, depth: 0 }];
+    let fetches = 0;
+
+    while (queue.length > 0 && fetches < MAX_FETCHES) {
+      const item = queue.shift();
+      if (!item) break;
+      if (item.depth > MAX_DEPTH) continue;
+      fetches++;
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 5000);
+        const modRes = await fetch(`${sandboxUrl}${item.path}`, {
+          signal: ctrl.signal,
+          headers: { 'user-agent': 'agentic-room-preview-check' },
+        });
+        clearTimeout(t);
+
+        if (modRes.status >= 400) {
+          const errBody = await modRes.text();
+          brokenModules.push({
+            path: item.path,
+            status: modRes.status,
+            preview: errBody.slice(0, 300),
+          });
+          continue;
+        }
+
+        // Vite transforms `from './foo'` into `from "/src/components/foo.jsx"`.
+        // Only follow user-source paths (start with /src/); skip /node_modules,
+        // /@vite, /@id, and bare imports.
+        const modText = await modRes.text();
+        const importRx = /from\s+["'](\/src\/[^"'?]+)(?:\?[^"']*)?["']/g;
+        let m: RegExpExecArray | null;
+        while ((m = importRx.exec(modText)) !== null) {
+          const importPath = m[1];
+          if (!visited.has(importPath)) {
+            visited.add(importPath);
+            queue.push({ path: importPath, depth: item.depth + 1 });
+          }
+        }
+      } catch (err) {
+        brokenModules.push({
+          path: item.path,
+          status: 0,
+          preview: errMsg(err),
+        });
+      }
+    }
+  }
+
+  if (brokenModules.length > 0) {
+    for (const b of brokenModules.slice(0, 5)) {
+      reasons.push(
+        `module ${b.path} returned HTTP ${b.status || 'error'}: ${b.preview.slice(0, 180)}`,
+      );
+    }
+    if (brokenModules.length > 5) {
+      reasons.push(`(${brokenModules.length - 5} more broken modules omitted)`);
+    }
+  }
+
+  // 3. Tail recent Vite log lines (only available if Vite was started with
   // file logging — newer provisions do this; older ones return a placeholder).
   let viteLog = '';
   try {
@@ -252,7 +334,8 @@ export async function checkPreview(
     urlStatus < 400 &&
     !bodyHasErrorMarkup &&
     !hasViteError &&
-    mainModuleOk;
+    mainModuleOk &&
+    brokenModules.length === 0;
 
   return {
     looksHealthy,
@@ -261,6 +344,7 @@ export async function checkPreview(
     bodyPreview,
     viteLog: viteLog.slice(-2500),
     reasons,
+    brokenModules,
   };
 }
 

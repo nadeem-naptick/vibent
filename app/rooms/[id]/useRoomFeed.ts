@@ -230,16 +230,18 @@ export function useRoomFeed(initial: RoomFeed, roomId: string) {
     dispatch({ type: 'intent', payload: intent });
   }, []);
 
-  // Helper for components that want to know when any task completes, so they
-  // can do side effects (e.g. force-refresh the preview iframe).
-  const lastCompletedTaskId =
-    state.tasks.find((t) => t.status === 'complete')?.id ?? null;
+  // Counter that ticks up every time another task transitions into
+  // 'complete'. Used by LiveRoomClient to force-reload the preview iframe.
+  // Counting works where lastCompletedTaskId didn't — find() returns the
+  // first completed task, which never changes after the first one, so
+  // subsequent completions wouldn't bump the iframe key.
+  const completedTaskCount = state.tasks.filter((t) => t.status === 'complete').length;
 
   return {
     feed: state,
     updateIntent,
     addLocalTranscript,
     addLocalIntent,
-    lastCompletedTaskId,
+    completedTaskCount,
   };
 }
