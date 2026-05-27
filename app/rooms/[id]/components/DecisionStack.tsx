@@ -67,9 +67,9 @@ export function DecisionStack({
   }
 
   return (
-    <div className="absolute left-5 top-24 z-30 w-[340px] pointer-events-none">
+    <div className="absolute left-3 right-3 md:right-auto md:left-5 top-24 z-30 md:w-[340px] pointer-events-none">
       {/* Header — same pill size as the bottom toolbar */}
-      <div className="pointer-events-auto mb-3 flex items-center gap-5">
+      <div className="pointer-events-auto mb-3 flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-5">
         {isHost && (
           <PillButton
             icon={PenLine}

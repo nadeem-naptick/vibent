@@ -47,16 +47,17 @@ export function ParticipantDock({ onEndCall, deviceFrame, onChangeDeviceFrame }:
 
   return (
     <div
-      className="absolute bottom-6 z-30 flex flex-col items-center gap-3 pointer-events-none"
+      className="absolute bottom-4 md:bottom-6 z-30 flex flex-col items-center gap-3 pointer-events-none"
       style={{
         left: '50%',
         transform: 'translateX(-50%)',
       }}
     >
-      {/* Video tiles — always render so the toolbar has a consistent anchor.
-          When there's no one, just the toolbar shows. */}
+      {/* Video tiles — horizontally scroll on mobile so more than one fits.
+          Max width is the viewport minus a small padding (mobile) or 200px
+          to leave room for the side overlays (desktop). */}
       {participants.length > 0 && (
-        <div className="pointer-events-auto flex items-end gap-3 rounded-[28px] border border-white/15 bg-slate-950/70 p-2.5 shadow-2xl backdrop-blur-2xl overflow-x-auto max-w-[calc(100vw-200px)]">
+        <div className="pointer-events-auto flex items-end gap-2 md:gap-3 rounded-[28px] border border-white/15 bg-slate-950/70 p-2 md:p-2.5 shadow-2xl backdrop-blur-2xl overflow-x-auto max-w-[calc(100vw-1.5rem)] md:max-w-[calc(100vw-200px)]">
           {participants.map((p, index) => (
             <ParticipantTile key={p.identity} participant={p} index={index} />
           ))}
@@ -109,36 +110,63 @@ function ParticipantToolbar({
   }
 
   return (
-    <div className="flex items-center gap-5">
-      <PillButton
-        icon={Users}
-        title={`${participantCount} ${participantCount === 1 ? 'person' : 'people'}`}
-        variant="active"
-      />
-      <PillButton
-        icon={mic ? Mic : MicOff}
-        title={mic ? 'Mute mic' : 'Unmute mic'}
-        onClick={() => toggleMic()}
-        variant={mic ? 'default' : 'danger'}
-      />
-      <PillButton
-        icon={camera ? Video : VideoOff}
-        title={camera ? 'Stop camera' : 'Start camera'}
-        onClick={() => toggleCamera()}
-        variant={camera ? 'default' : 'danger'}
-      />
-      <PillButton icon={MonitorUp} title="Share screen" onClick={toggleScreenShare} />
-      <PillButton
-        icon={deviceFrame === 'mobile' ? Smartphone : Monitor}
-        title={
-          deviceFrame === 'mobile'
-            ? 'Mobile preview — click to switch to desktop'
-            : 'Desktop preview — click to switch to mobile'
-        }
-        onClick={() => onChangeDeviceFrame(deviceFrame === 'mobile' ? 'desktop' : 'mobile')}
-      />
-      <PillButton icon={PhoneOff} title="Leave room" onClick={onEndCall} variant="danger" />
-    </div>
+    <>
+      {/* Mobile: just mic + cam + end. Compact pills. Screen share, device
+          frame, and participant count are desktop-only — they overflow a
+          phone-width viewport. */}
+      <div className="flex md:hidden items-center gap-2">
+        <PillButton
+          icon={mic ? Mic : MicOff}
+          title={mic ? 'Mute mic' : 'Unmute mic'}
+          onClick={() => toggleMic()}
+          variant={mic ? 'default' : 'danger'}
+        />
+        <PillButton
+          icon={camera ? Video : VideoOff}
+          title={camera ? 'Stop camera' : 'Start camera'}
+          onClick={() => toggleCamera()}
+          variant={camera ? 'default' : 'danger'}
+        />
+        <PillButton
+          icon={PhoneOff}
+          title="Leave room"
+          onClick={onEndCall}
+          variant="danger"
+        />
+      </div>
+
+      {/* Desktop: full toolbar. */}
+      <div className="hidden md:flex items-center gap-5">
+        <PillButton
+          icon={Users}
+          title={`${participantCount} ${participantCount === 1 ? 'person' : 'people'}`}
+          variant="active"
+        />
+        <PillButton
+          icon={mic ? Mic : MicOff}
+          title={mic ? 'Mute mic' : 'Unmute mic'}
+          onClick={() => toggleMic()}
+          variant={mic ? 'default' : 'danger'}
+        />
+        <PillButton
+          icon={camera ? Video : VideoOff}
+          title={camera ? 'Stop camera' : 'Start camera'}
+          onClick={() => toggleCamera()}
+          variant={camera ? 'default' : 'danger'}
+        />
+        <PillButton icon={MonitorUp} title="Share screen" onClick={toggleScreenShare} />
+        <PillButton
+          icon={deviceFrame === 'mobile' ? Smartphone : Monitor}
+          title={
+            deviceFrame === 'mobile'
+              ? 'Mobile preview — click to switch to desktop'
+              : 'Desktop preview — click to switch to mobile'
+          }
+          onClick={() => onChangeDeviceFrame(deviceFrame === 'mobile' ? 'desktop' : 'mobile')}
+        />
+        <PillButton icon={PhoneOff} title="Leave room" onClick={onEndCall} variant="danger" />
+      </div>
+    </>
   );
 }
 

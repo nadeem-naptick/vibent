@@ -58,7 +58,7 @@ export function Drawer({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-6"
+          className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/40 backdrop-blur-sm p-0 md:p-6"
           onClick={onClose}
         >
           <motion.div
@@ -67,7 +67,7 @@ export function Drawer({
             exit={{ y: 24, opacity: 0, scale: 0.97 }}
             transition={{ type: 'spring', stiffness: 280, damping: 28 }}
             onClick={(e) => e.stopPropagation()}
-            className="w-[min(760px,calc(100vw-40px))] max-h-[80vh] flex flex-col rounded-[28px] border border-white/12 bg-[#0B0F14] shadow-2xl"
+            className="w-full md:w-[min(760px,calc(100vw-40px))] max-h-[92vh] md:max-h-[80vh] flex flex-col rounded-t-[28px] md:rounded-[28px] border border-white/12 bg-[#0B0F14] shadow-2xl"
           >
             <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-white/8">
               <div className="min-w-0">

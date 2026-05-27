@@ -20,7 +20,7 @@ export function TopCenterRail({ badges, onOpen }: Props) {
   ];
 
   return (
-    <div className="absolute left-1/2 top-5 z-30 -translate-x-1/2 flex items-center gap-5">
+    <div className="absolute left-1/2 top-3 md:top-5 z-30 -translate-x-1/2 flex items-center gap-2 md:gap-5">
       {items.map(({ icon: Icon, label, key, badge }) => (
         <PillButton
           key={key}

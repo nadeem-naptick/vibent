@@ -12,6 +12,7 @@ import {
   Loader2,
   X,
   ExternalLink,
+  MoreHorizontal,
 } from 'lucide-react';
 import type { RoomSettings } from '../useSettings';
 import { PillButton } from './PillButton';
@@ -127,8 +128,46 @@ export function BottomActionCluster({
     setShareOpen(false);
   }
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
-    <div className="absolute bottom-6 right-6 z-30 flex items-center gap-5">
+    <>
+      {/* Mobile: single ⋯ pill that opens a bottom-sheet menu. */}
+      <div className="md:hidden absolute bottom-4 right-4 z-30">
+        <PillButton
+          icon={MoreHorizontal}
+          title="Room actions"
+          onClick={() => setMobileMenuOpen(true)}
+        />
+        {mobileMenuOpen && (
+          <MobileActionsSheet
+            onClose={() => setMobileMenuOpen(false)}
+            settings={settings}
+            updateSettings={updateSettings}
+            limits={limits}
+            onEnterFocus={() => {
+              setMobileMenuOpen(false);
+              onEnterFocus();
+            }}
+            onFullscreen={() => {
+              setMobileMenuOpen(false);
+              toggleFullscreen();
+            }}
+            onShare={() => {
+              setMobileMenuOpen(false);
+              openShare();
+            }}
+            onExport={() => {
+              setMobileMenuOpen(false);
+              downloadExport();
+            }}
+            exporting={exporting}
+          />
+        )}
+      </div>
+
+      {/* Desktop: the existing horizontal row of 5 pills. */}
+      <div className="hidden md:flex absolute bottom-6 right-6 z-30 items-center gap-5">
       {/* Settings popover */}
       <div className="relative" ref={popoverRef}>
         <PillButton
@@ -191,6 +230,8 @@ export function BottomActionCluster({
         </div>
       )}
 
+      </div>
+
       {shareOpen && (
         <ShareModal
           sharing={sharing}
@@ -201,7 +242,106 @@ export function BottomActionCluster({
           onClose={closeShare}
         />
       )}
+    </>
+  );
+}
+
+function MobileActionsSheet({
+  onClose,
+  settings,
+  updateSettings,
+  limits,
+  onEnterFocus,
+  onFullscreen,
+  onShare,
+  onExport,
+  exporting,
+}: {
+  onClose: () => void;
+  settings: RoomSettings;
+  updateSettings: (patch: Partial<RoomSettings>) => void;
+  limits: { MIN_THRESHOLD: number; MAX_THRESHOLD: number };
+  onEnterFocus: () => void;
+  onFullscreen: () => void;
+  onShare: () => void;
+  onExport: () => void;
+  exporting: boolean;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-stretch bg-black/60 backdrop-blur-sm md:hidden"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-h-[85vh] overflow-y-auto rounded-t-3xl border-t border-white/10 bg-[#0B0F14] p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-white">Room actions</h3>
+          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white/8 text-white/65">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          <MobileAction icon={Share2} label="Share" onClick={onShare} />
+          <MobileAction
+            icon={exporting ? Loader2 : Download}
+            label={exporting ? 'Building export…' : 'Export'}
+            onClick={onExport}
+            iconClassName={exporting ? 'animate-spin' : ''}
+            primary
+          />
+          <MobileAction icon={Focus} label="Focus mode" onClick={onEnterFocus} />
+          <MobileAction icon={Maximize2} label="Fullscreen" onClick={onFullscreen} />
+        </div>
+
+        <div className="mt-6 pt-5 border-t border-white/8">
+          <h4 className="text-[11px] uppercase tracking-widest text-white/45 mb-2.5">Auto-compose</h4>
+          <label className="block">
+            <span className="text-sm text-white/80">Detections per decision</span>
+            <input
+              type="number"
+              min={limits.MIN_THRESHOLD}
+              max={limits.MAX_THRESHOLD}
+              value={settings.autoComposeThreshold}
+              onChange={(e) =>
+                updateSettings({ autoComposeThreshold: parseInt(e.target.value, 10) || 7 })
+              }
+              className="mt-1.5 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-400/40"
+            />
+          </label>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function MobileAction({
+  icon: Icon,
+  label,
+  onClick,
+  primary,
+  iconClassName,
+}: {
+  icon: typeof Settings2;
+  label: string;
+  onClick: () => void;
+  primary?: boolean;
+  iconClassName?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors ${
+        primary
+          ? 'bg-white text-neutral-950 hover:bg-blue-50'
+          : 'bg-white/[0.04] text-white/85 hover:bg-white/[0.08]'
+      }`}
+    >
+      <Icon size={20} className={iconClassName} />
+      <span className="text-sm font-semibold">{label}</span>
+    </button>
   );
 }
 

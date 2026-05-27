@@ -75,7 +75,7 @@ export function BuildingStack({ tasks, isHost }: Props) {
   if (visible.length === 0 && tasks.length === 0) return null;
 
   return (
-    <div className="absolute right-5 top-24 z-30 w-[320px] pointer-events-none flex flex-col gap-2">
+    <div className="hidden md:flex absolute right-5 top-24 z-30 w-[320px] pointer-events-none flex-col gap-2">
       {/* History toggle — always visible when any tasks exist */}
       {tasks.length > 0 && (
         <button
