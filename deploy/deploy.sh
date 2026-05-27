@@ -50,6 +50,11 @@ echo "→ deploying $COMMIT  $SUBJECT"
 echo
 
 # ----- 2. local build --------------------------------------------------------
+# Wipe .next first so Turbopack dev artifacts (from `npm run dev`) don't
+# collide with `next build`'s rollup output. Symptom of the collision:
+# "Cannot find module '../chunks/ssr/[turbopack]_runtime.js'" during build.
+echo "→ clearing .next"
+rm -rf .next
 echo "→ local build"
 npm run build
 
