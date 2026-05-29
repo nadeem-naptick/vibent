@@ -23,6 +23,10 @@ export const users = pgTable('users', {
   email: text('email').unique(),
   emailVerified: timestamp('emailVerified', { mode: 'date' }),
   image: text('image'),
+  // bcrypt hash of the user's password. Nullable for back-compat with
+  // existing accounts created via the dev name-only flow; new accounts
+  // through email/password signup always have one.
+  passwordHash: text('password_hash'),
 });
 
 export const accounts = pgTable(
@@ -55,11 +59,23 @@ export const sessions = pgTable('sessions', {
   expires: timestamp('expires', { mode: 'date' }).notNull(),
 });
 
+// Token purposes — keeps verification + reset on the same table without
+// confusing the two. We always look up by (token hash, type) and delete on
+// use so a single-use guarantee is enforced.
+export const tokenTypeEnum = pgEnum('verification_token_type', [
+  'email_verification',
+  'password_reset',
+]);
+
 export const verificationTokens = pgTable(
   'verificationTokens',
   {
-    identifier: text('identifier').notNull(),
+    identifier: text('identifier').notNull(), // user email
+    // SHA-256 hash of the raw token. The raw token is in the email link;
+    // the DB only stores the hash so a leaked DB dump can't be used to
+    // forge active links.
     token: text('token').notNull(),
+    type: tokenTypeEnum('type').notNull().default('email_verification'),
     expires: timestamp('expires', { mode: 'date' }).notNull(),
   },
   (vt) => [primaryKey({ columns: [vt.identifier, vt.token] })],
