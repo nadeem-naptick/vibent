@@ -136,7 +136,7 @@ export async function POST(
   //    expose the raw bucket name.
   const appBase = (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '');
   const url = appBase
-    ? `${appBase}/share/${slug}/`
+    ? `${appBase}/shares/${slug}/`
     : `https://${bucket}.s3.${region}.amazonaws.com/${s3Prefix}index.html`;
 
   return NextResponse.json(
