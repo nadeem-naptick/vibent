@@ -42,9 +42,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Agentic Collaboration Room",
+  title: "vibemtg — meet · think · generate",
   description:
-    "A live execution workspace where teams discuss, decide, and watch the product artifact take shape in real time.",
+    "A video room where your team talks through what they want and a real product takes shape live.",
   robots: "noindex, nofollow",
 };
 

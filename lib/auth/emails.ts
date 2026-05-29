@@ -15,7 +15,7 @@ function client(): Resend {
 
 // Resend's testing sender — works without verifying a domain. Replace
 // FROM with your verified `noreply@yourdomain.com` once a domain is set up.
-const FROM = process.env.AUTH_EMAIL_FROM ?? 'vibent <onboarding@resend.dev>';
+const FROM = process.env.AUTH_EMAIL_FROM ?? 'vibemtg <onboarding@resend.dev>';
 
 function appUrl(): string {
   // Build the base URL the verification + reset links point at. Falls
@@ -25,7 +25,7 @@ function appUrl(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Template — a single shared HTML wrapper with vibent's brand colors. Keep
+// Template — a single shared HTML wrapper with vibemtg's brand colors. Keep
 // it inline-styled so it renders correctly across Gmail / Outlook /
 // Apple Mail without needing a CSS file.
 // ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ function renderEmail({ title, body, cta, postscript }: Section): string {
             <tr>
               <td style="padding:32px 36px 8px 36px;">
                 <div style="display:inline-block;width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#8B3DFF 0%,#A855F7 60%,#FBBF24 100%);"></div>
-                <div style="margin-top:12px;font-weight:700;font-size:18px;letter-spacing:-0.01em;color:#0f172a;">vibent</div>
+                <div style="margin-top:12px;font-weight:700;font-size:18px;letter-spacing:-0.01em;color:#0f172a;">vibemtg</div>
               </td>
             </tr>
             <tr>
@@ -74,7 +74,7 @@ function renderEmail({ title, body, cta, postscript }: Section): string {
                 : `<tr><td style="padding:32px 36px;"></td></tr>`
             }
           </table>
-          <p style="margin:16px 0 0 0;font-size:12px;color:#94a3b8;">vibent — meetings that build</p>
+          <p style="margin:16px 0 0 0;font-size:12px;color:#94a3b8;">vibemtg — meet · think · generate</p>
         </td>
       </tr>
     </table>
@@ -90,14 +90,14 @@ export async function sendVerificationEmail(opts: { to: string; rawToken: string
   const url = `${appUrl()}/api/auth/verify-email?token=${encodeURIComponent(opts.rawToken)}`;
   const html = renderEmail({
     title: 'Confirm your email to get started',
-    body: 'Welcome to vibent. Click the button below to confirm this is your email address — then you can sign in and start your first room.',
+    body: 'Welcome to vibemtg. Click the button below to confirm this is your email address — then you can sign in and start your first room.',
     cta: { label: 'Verify email', href: url },
-    postscript: "This link expires in 24 hours. If you didn't sign up for vibent, you can safely ignore this email.",
+    postscript: "This link expires in 24 hours. If you didn't sign up for vibemtg, you can safely ignore this email.",
   });
   await client().emails.send({
     from: FROM,
     to: opts.to,
-    subject: 'Confirm your email · vibent',
+    subject: 'Confirm your email · vibemtg',
     html,
   });
 }
@@ -105,7 +105,7 @@ export async function sendVerificationEmail(opts: { to: string; rawToken: string
 export async function sendPasswordResetEmail(opts: { to: string; rawToken: string }) {
   const url = `${appUrl()}/reset-password?token=${encodeURIComponent(opts.rawToken)}`;
   const html = renderEmail({
-    title: 'Reset your vibent password',
+    title: 'Reset your vibemtg password',
     body: 'We received a request to reset your password. Click the button below to choose a new one.',
     cta: { label: 'Reset password', href: url },
     postscript: "This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email — your password won't change.",
@@ -113,7 +113,7 @@ export async function sendPasswordResetEmail(opts: { to: string; rawToken: strin
   await client().emails.send({
     from: FROM,
     to: opts.to,
-    subject: 'Reset your password · vibent',
+    subject: 'Reset your password · vibemtg',
     html,
   });
 }
@@ -121,13 +121,13 @@ export async function sendPasswordResetEmail(opts: { to: string; rawToken: strin
 export async function sendPasswordChangedEmail(opts: { to: string }) {
   const html = renderEmail({
     title: 'Your password was changed',
-    body: "Just confirming that your vibent password was changed. If this was you, no action needed. If you don't recognize this change, reset your password immediately and contact support.",
+    body: "Just confirming that your vibemtg password was changed. If this was you, no action needed. If you don't recognize this change, reset your password immediately and contact support.",
     cta: { label: 'Sign in', href: `${appUrl()}/signin` },
   });
   await client().emails.send({
     from: FROM,
     to: opts.to,
-    subject: 'Your password was changed · vibent',
+    subject: 'Your password was changed · vibemtg',
     html,
   });
 }

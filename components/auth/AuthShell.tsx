@@ -29,7 +29,7 @@ export function AuthShell({
         >
           <Sparkles size={16} className="text-white" strokeWidth={2.4} />
         </div>
-        <span className="text-xl font-bold tracking-tight text-slate-900">vibent</span>
+        <span className="text-xl font-bold tracking-tight text-slate-900">vibemtg</span>
       </Link>
 
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl p-8">
@@ -44,7 +44,7 @@ export function AuthShell({
         {children}
       </div>
 
-      <p className="mt-8 text-xs text-slate-400">vibent · meetings that build</p>
+      <p className="mt-8 text-xs text-slate-400">vibemtg · meet · think · generate</p>
     </main>
   );
 }

@@ -69,7 +69,7 @@ export default async function HomePage() {
             <div className="grid h-8 w-8 place-items-center rounded-lg" style={{ backgroundColor: PRIMARY }}>
               <Sparkles size={16} className="text-white" strokeWidth={2.4} />
             </div>
-            <span className="text-lg font-bold tracking-tight text-slate-900">vibent</span>
+            <span className="text-lg font-bold tracking-tight text-slate-900">vibemtg</span>
           </Link>
           <nav className="hidden md:flex items-center gap-9 text-[15px] font-medium text-slate-700">
             <a href="#features" className="hover:text-slate-900 transition-colors">Features</a>
@@ -135,7 +135,7 @@ export default async function HomePage() {
             Your next meeting builds the product.
           </h1>
           <p className="mt-7 max-w-2xl mx-auto text-lg lg:text-xl text-slate-500 leading-relaxed">
-            vibent is a video room where your team talks through what they want
+            vibemtg is a video room where your team talks through what they want
             — a landing page, a clickable prototype, a deck, a dashboard — and
             it takes shape live, while you discuss it.
           </p>
@@ -169,7 +169,7 @@ export default async function HomePage() {
             <div className="relative rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
               <img
                 src="/vibentimg.png"
-                alt="vibent — a video room where a real product takes shape live"
+                alt="vibemtg — a video room where a real product takes shape live"
                 className="w-full h-auto block"
               />
             </div>
@@ -263,7 +263,7 @@ export default async function HomePage() {
               <p className="mt-5 text-lg text-slate-500 leading-relaxed">
                 Get on a call with your team. Discuss what you want. The room
                 listens to every word, picks up on the decisions, and shows them
-                back for approval. You stay in conversation — vibent does the
+                back for approval. You stay in conversation — vibemtg does the
                 bookkeeping.
               </p>
               <ul className="mt-8 space-y-4">
@@ -521,7 +521,7 @@ export default async function HomePage() {
                 <div className="grid h-8 w-8 place-items-center rounded-lg" style={{ backgroundColor: PRIMARY }}>
                   <Sparkles size={16} className="text-white" strokeWidth={2.4} />
                 </div>
-                <span className="text-lg font-bold tracking-tight text-white">vibent</span>
+                <span className="text-lg font-bold tracking-tight text-white">vibemtg</span>
               </Link>
               <p className="mt-5 max-w-xs text-sm text-slate-400 leading-relaxed">
                 A video room where your team gets on a call, talks, and a real
@@ -570,8 +570,8 @@ export default async function HomePage() {
           </div>
 
           <div className="pt-8 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
-            <div>© {new Date().getFullYear()} vibent. All rights reserved.</div>
-            <div>Built in private beta · meetings that build</div>
+            <div>© {new Date().getFullYear()} vibemtg. All rights reserved.</div>
+            <div>Built in private beta · meet · think · generate</div>
           </div>
         </div>
       </footer>

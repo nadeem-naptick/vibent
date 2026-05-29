@@ -73,7 +73,7 @@ export function BottomActionCluster({
       // Pull suggested filename from Content-Disposition; fall back to a default.
       const cd = res.headers.get('content-disposition') ?? '';
       const m = cd.match(/filename="([^"]+)"/);
-      const filename = m?.[1] ?? 'vibent-export.zip';
+      const filename = m?.[1] ?? 'vibemtg-export.zip';
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

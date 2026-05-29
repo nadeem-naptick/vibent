@@ -18,7 +18,7 @@ export default async function SignInPage({
   return (
     <AuthShell
       title="Welcome back"
-      subtitle="Sign in to your vibent account."
+      subtitle="Sign in to your vibemtg account."
     >
       <SignInForm callbackUrl={target} initialError={error} />
       <div className="mt-6 pt-6 border-t border-slate-100 text-center text-sm text-slate-500">

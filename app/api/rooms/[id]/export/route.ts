@@ -119,7 +119,7 @@ export async function POST(
         status: 200,
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
-          'Content-Disposition': `attachment; filename="vibent-${safeTitle}.html"`,
+          'Content-Disposition': `attachment; filename="vibemtg-${safeTitle}.html"`,
         },
       });
     }
@@ -144,7 +144,7 @@ export async function POST(
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="vibent-${safeTitle}.zip"`,
+        'Content-Disposition': `attachment; filename="vibemtg-${safeTitle}.zip"`,
         'Content-Length': buffer.length.toString(),
       },
     });
