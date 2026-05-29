@@ -129,9 +129,15 @@ export async function POST(
     totalBytes,
   });
 
-  // 6. Construct the public URL. Direct-object S3 URL pattern is:
-  //    https://<bucket>.s3.<region>.amazonaws.com/<key>
-  const url = `https://${bucket}.s3.${region}.amazonaws.com/${s3Prefix}index.html`;
+  // 6. Construct the public URL. Browsers hit the app's own domain (e.g.
+  //    https://vibemtg.com/share/<slug>/) and nginx reverse-proxies to the
+  //    S3 website endpoint with the Host header rewritten. Keeps everything
+  //    on one domain (no CDN/CNAME plumbing), URL is short, and we never
+  //    expose the raw bucket name.
+  const appBase = (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '');
+  const url = appBase
+    ? `${appBase}/share/${slug}/`
+    : `https://${bucket}.s3.${region}.amazonaws.com/${s3Prefix}index.html`;
 
   return NextResponse.json(
     { slug, url, fileCount: files.length, totalBytes },
