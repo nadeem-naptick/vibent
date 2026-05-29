@@ -275,14 +275,18 @@ const themeConfig: Config = {
         "xl-max": { max: "1199px" }
       },
       opacity: opacities,
+      // Spacing / width / height / inset overrides REMOVED.
+      // The previous `spacing: { ...sizes }` mapped every utility to a
+      // pixel value matching the number (gap-4 → 4px, mt-8 → 8px, w-12 →
+      // 12px etc.), silently compressing the entire app to ~25% of the
+      // standard Tailwind scale. No code in the repo used values above 32
+      // so nothing relied on the pixel scale; every line of code already
+      // assumed default Tailwind values. We keep `root: var(--root-padding)`
+      // as an addition (not an override) so existing CSS-variable padding
+      // works.
       spacing: {
-        ...sizes,
         'root': 'var(--root-padding)'
       },
-      width: sizes,
-      maxWidth: sizes,
-      height: sizes,
-      inset: sizes,
       borderWidth: sizes,
       backdropBlur: Array.from({ length: 20 }, (_, i) => i).reduce(
         (acc, curr) => {

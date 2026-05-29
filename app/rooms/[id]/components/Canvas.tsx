@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { Loader2, AlertTriangle, Sparkles, Mic } from 'lucide-react';
 import { getTemplate } from '@/lib/templates';
 import type { DeviceFrame } from '../useSettings';
+import type { LiveTask } from '../types';
+import { LiveTaskActivity } from './LiveTaskActivity';
 
 type Props = {
   sandboxUrl: string | null;
@@ -13,6 +15,10 @@ type Props = {
   roomId: string;
   templateId: string | null;
   hasFirstVersion: boolean;
+  // The currently-running task in the room, if any. Used to render the
+  // live activity ticker on the empty-state overlay so users can see what
+  // the agent is doing instead of staring at a blank page for ~60s.
+  activeTask: LiveTask | undefined;
 };
 
 const FRAME_WIDTH = '390px';
@@ -26,6 +32,7 @@ export function Canvas({
   roomId,
   templateId,
   hasFirstVersion,
+  activeTask,
 }: Props) {
   const isMobile = deviceFrame === 'mobile';
   const template = getTemplate(templateId);
@@ -64,7 +71,9 @@ export function Canvas({
                 title="Room artifact preview"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               />
-              {showEmptyState && template && <EmptyStateOverlay template={template} />}
+              {showEmptyState && template && (
+                <EmptyStateOverlay template={template} activeTask={activeTask} />
+              )}
             </>
           ) : status === 'error' ? (
             <PreviewError roomId={roomId} />
@@ -171,11 +180,15 @@ function PreviewError({ roomId }: { roomId: string }) {
 
 function EmptyStateOverlay({
   template,
+  activeTask,
 }: {
   template: ReturnType<typeof getTemplate>;
+  activeTask: LiveTask | undefined;
 }) {
   if (!template) return null;
   const Icon = template.icon;
+  const taskRunning =
+    activeTask?.status === 'running' || activeTask?.status === 'queued';
   return (
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gradient-to-b from-[#05070A]/95 via-[#05070A]/90 to-[#05070A]/95 backdrop-blur-md">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(79,140,255,.18),transparent_55%)]" />
@@ -194,9 +207,15 @@ function EmptyStateOverlay({
         <p className="mt-4 text-base text-white/65 leading-relaxed">
           {template.emptyStateBody}
         </p>
-        <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-500/10 px-4 py-2 text-sm text-blue-100">
-          <Mic size={14} className="text-blue-200" />
-          Start talking — every decision lands here.
+        <div className="mt-8 flex justify-center">
+          {taskRunning ? (
+            <LiveTaskActivity task={activeTask} />
+          ) : (
+            <div className="inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-500/10 px-4 py-2 text-sm text-blue-100">
+              <Mic size={14} className="text-blue-200" />
+              Start talking — every decision lands here.
+            </div>
+          )}
         </div>
       </div>
     </div>

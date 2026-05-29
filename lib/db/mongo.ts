@@ -22,7 +22,18 @@ function getClientPromise(): Promise<MongoClient> {
   }
   if (!global.__mongoClientPromise) {
     const client = new MongoClient(uri, options);
-    global.__mongoClientPromise = client.connect();
+    // Wrap with a catch that drops the cached promise on connect failure.
+    // Without this, a one-off connect failure (tunnel down, mongo restart)
+    // poisons the module-level cache for the lifetime of the Node process,
+    // and every request returns the same rejected promise (ECONNREFUSED)
+    // until you restart the server.
+    const p = client.connect().catch((err: Error) => {
+      global.__mongoClientPromise = undefined;
+      // Reset the indexes guard too, so a fresh client re-creates them.
+      indexesEnsured = false;
+      throw err;
+    });
+    global.__mongoClientPromise = p;
   }
   return global.__mongoClientPromise;
 }

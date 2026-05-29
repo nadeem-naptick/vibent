@@ -1,12 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Roboto_Mono } from "next/font/google";
+import { Inter, Roboto_Mono, Public_Sans } from "next/font/google";
 import localFont from "next/font/local";
 import { Toaster } from "sonner";
 import "./globals.css";
 
-const inter = Inter({ 
+const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter"
+});
+
+// Public Sans — used by the marketing landing page. Loaded via next/font so
+// the font is inlined at build time and there's no FOUC / metric-shift on
+// first paint (which made everything look "compressed" before the font
+// arrived from Google).
+const publicSans = Public_Sans({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800", "900"],
+  variable: "--font-public-sans",
 });
 
 const geistSans = localFont({
@@ -45,7 +55,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${geistSans.variable} ${geistMono.variable} ${robotoMono.variable} font-sans`}>
+      <body className={`${inter.variable} ${publicSans.variable} ${geistSans.variable} ${geistMono.variable} ${robotoMono.variable} font-sans`}>
         {children}
         <Toaster
           theme="dark"

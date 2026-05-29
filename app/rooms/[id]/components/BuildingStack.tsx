@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Zap, Check, X, AlertTriangle, ListChecks } from 'lucide-react';
 import { toast } from 'sonner';
 import type { LiveTask } from '../types';
+import { friendlyEventLabel } from '../taskEventLabels';
+import { useTaskProgress } from '../useTaskProgress';
 
 type Props = {
   tasks: LiveTask[];
@@ -142,70 +144,79 @@ function TaskCard({
       ? 'text-emerald-200'
       : 'text-white/80';
 
+  const progress = useTaskProgress(task);
+  const friendly = isLive ? friendlyEventLabel(progress.latestEvent) : null;
+
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/85 backdrop-blur-2xl p-3.5 shadow-2xl">
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <div className={`flex items-center gap-1.5 text-xs font-semibold ${accentText}`}>
-          {isDone ? (
-            <Check size={14} />
-          ) : isFailed ? (
-            <AlertTriangle size={14} />
-          ) : (
-            <Zap size={isLive ? 14 : 12} className={isLive ? 'animate-pulse' : ''} />
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/85 backdrop-blur-2xl shadow-2xl">
+      <div className="p-3.5">
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <div className={`flex items-center gap-1.5 text-xs font-semibold ${accentText}`}>
+            {isDone ? (
+              <Check size={14} />
+            ) : isFailed ? (
+              <AlertTriangle size={14} />
+            ) : (
+              <Zap size={isLive ? 14 : 12} className={isLive ? 'animate-pulse' : ''} />
+            )}
+            <span className="capitalize">
+              {isLive
+                ? progress.phase === 'skeleton'
+                  ? 'Sketching'
+                  : progress.phase === 'finishing'
+                    ? 'Finishing'
+                    : 'Building'
+                : isQueued
+                  ? 'Queued'
+                  : isDone
+                    ? 'Done'
+                    : isCancelled
+                      ? 'Cancelled'
+                      : 'Failed'}
+            </span>
+            {isLive && (
+              <span className="ml-1 text-[10px] tabular-nums text-white/45">
+                {progress.percent}%
+              </span>
+            )}
+          </div>
+          {onCancel && (isQueued || isLive) && (
+            <button
+              onClick={onCancel}
+              disabled={cancelling}
+              title={isLive ? 'Stop and roll back' : 'Cancel'}
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/10 text-white/70 hover:bg-red-500/80 hover:text-white disabled:opacity-50 transition-colors"
+            >
+              <X size={12} strokeWidth={2.5} />
+            </button>
           )}
-          <span className="capitalize">
-            {isLive
-              ? 'Building'
-              : isQueued
-              ? 'Queued'
-              : isDone
-              ? 'Done'
-              : isCancelled
-              ? 'Cancelled'
-              : 'Failed'}
-          </span>
         </div>
-        {onCancel && (isQueued || isLive) && (
-          <button
-            onClick={onCancel}
-            disabled={cancelling}
-            title={isLive ? 'Stop and roll back' : 'Cancel'}
-            className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/10 text-white/70 hover:bg-red-500/80 hover:text-white disabled:opacity-50 transition-colors"
-          >
-            <X size={12} strokeWidth={2.5} />
-          </button>
+        <div className="text-sm text-white/85 leading-snug line-clamp-2">{task.instruction}</div>
+        {isLive && friendly && (
+          <div className="mt-2 text-[11px] text-white/55 leading-snug truncate">
+            <span className="mr-1">{friendly.icon}</span>
+            {friendly.text}
+          </div>
+        )}
+        {isDone && task.summary && (
+          <div className="mt-1.5 text-[11px] italic text-white/45 leading-snug line-clamp-2">
+            {task.summary}
+          </div>
+        )}
+        {isFailed && task.error && (
+          <div className="mt-1.5 text-[11px] text-red-300/80 leading-snug line-clamp-2">
+            {task.error}
+          </div>
         )}
       </div>
-      <div className="text-sm text-white/85 leading-snug line-clamp-2">{task.instruction}</div>
-      {isLive && task.events.length > 0 && (
-        <div className="mt-2 text-[11px] text-white/45 leading-snug truncate">
-          {formatLastEvent(task.events[task.events.length - 1])}
-        </div>
-      )}
-      {isDone && task.summary && (
-        <div className="mt-1.5 text-[11px] italic text-white/45 leading-snug line-clamp-2">
-          {task.summary}
-        </div>
-      )}
-      {isFailed && task.error && (
-        <div className="mt-1.5 text-[11px] text-red-300/80 leading-snug line-clamp-2">
-          {task.error}
+      {isLive && (
+        <div className="h-1 w-full bg-white/[0.05]">
+          <div
+            className="h-full bg-gradient-to-r from-blue-500 to-blue-300 transition-[width] duration-500 ease-out"
+            style={{ width: `${progress.percent}%` }}
+          />
         </div>
       )}
     </div>
   );
-}
-
-function formatLastEvent(ev: LiveTask['events'][number]): string {
-  if (ev.kind === 'tool_call') {
-    const data = ev.data as Record<string, unknown> | undefined;
-    if (ev.toolName === 'write_file' && data) return `→ write ${data.path}`;
-    if (ev.toolName === 'read_file' && data) return `→ read ${data.path}`;
-    if (ev.toolName === 'list_files' && data) return `→ ls ${data.directory ?? '.'}`;
-    if (ev.toolName === 'install_packages' && data) return `→ npm i ${(data.packages as string[])?.join(' ') ?? ''}`;
-    if (ev.toolName === 'run_command' && data) return `→ $ ${data.command}`;
-    return `→ ${ev.toolName ?? 'tool'}`;
-  }
-  if (ev.kind === 'text') return ev.text ?? '';
-  return ev.text ?? '';
 }

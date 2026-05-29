@@ -112,6 +112,35 @@ The sandbox runs a Vite + React (JavaScript, NOT TypeScript) template. Use the *
 - index.html — root HTML
 Vite has HMR enabled, so any file you write triggers an immediate reload in the user's preview iframe.
 
+# Build phases — IMPORTANT for perceived UX
+
+If the task is **the first build of a new artifact** (the sandbox still shows the Vite starter and there's no existing structure to modify), work in TWO phases:
+
+## Phase 1: Skeleton (target ~10-15 seconds, do this FIRST)
+
+Write a **complete structural skeleton** of the whole artifact before any deep work:
+- Every major section the artifact needs (Hero, Features, Pricing, FAQ, Footer, etc. — pick what fits the artifact kind)
+- Placeholder text is fine ("Headline goes here", "Feature description...")
+- Real Tailwind styling — make it LOOK like a polished page in draft form, not a wireframe
+- One file per section under src/components/, all wired into src/App.jsx
+- **No web research yet.** No web_search, no fetch_url in Phase 1 — they take 5-15s each and slow down the user seeing anything.
+- **No package installs in Phase 1** unless absolutely required to render anything (e.g. you wouldn't write a chart component without recharts — but skip charts in Phase 1).
+- When the skeleton is done, **call \`mark_skeleton_complete\`** with a one-line summary of the layout. This forces the user's preview to reload so they see the skeleton immediately.
+- Then call \`check_preview\` to confirm it renders.
+
+## Phase 2: Refinement (the rest of the task)
+
+After Phase 1's check_preview is healthy, do the polish + research the user actually asked for:
+- web_search / fetch_url any sites referenced in the instruction
+- Replace placeholder copy with real, polished content
+- Update colors/typography to match the brand if given
+- Add any missing details
+- check_preview at the end (white screens here are still a no-go)
+
+## When NOT to use phases
+
+If the task is a **modification of an existing artifact** ("change the headline", "fix the white screen", "add a testimonial"), skip Phase 1 entirely. Just make the change. Don't call mark_skeleton_complete.
+
 # How to work
 1. If you need to know what's in a file before editing, list_files / read_file FIRST.
 2. Make the smallest set of changes that fulfills the instruction. Do NOT redesign the page.
@@ -167,7 +196,7 @@ Do NOT use them for:
 
 Each call costs real money and takes 2-15 seconds. Be specific in your queries and don't chain more than 2-3 calls per task.
 
-You have these tools: list_files, read_file, write_file, install_packages, run_command, check_preview, web_search, fetch_url.`;
+You have these tools: list_files, read_file, write_file, install_packages, run_command, check_preview, web_search, fetch_url, mark_skeleton_complete.`;
 }
 
 // ---------------------------------------------------------------------------

@@ -156,6 +156,30 @@ export function createSandboxTools(sandbox: SandboxProvider, sandboxUrl: string)
         }
       },
     }),
+
+    mark_skeleton_complete: tool({
+      description:
+        'Call EXACTLY ONCE after writing the complete structural skeleton — every section component file exists and is wired into App.jsx, even if the content is placeholder. This forces the user\'s preview iframe to reload so they see your skeleton immediately, then you continue with the detailed refinement phase. Do NOT call this from a task that modifies an existing artifact (only first-time builds).',
+      inputSchema: z.object({
+        summary: z
+          .string()
+          .min(2)
+          .max(300)
+          .describe(
+            'One-line description of the skeleton layout, e.g. "Hero + 3-col features + pricing + FAQ + footer".',
+          ),
+      }),
+      execute: async ({ summary }) => {
+        // No sandbox work — the value of this tool is the event it leaves
+        // in the task's event log. run-task / the client side watch for it.
+        return {
+          ok: true,
+          message:
+            'Skeleton milestone recorded. The user\'s preview will reload to show the skeleton. Continue with the refinement phase: research, write real content, polish styling.',
+          summary,
+        };
+      },
+    }),
   };
 }
 

@@ -18,6 +18,7 @@ import type { RoomFeed } from './types';
 import { ParticipantDock } from './components/ParticipantDock';
 import { DecisionStack } from './components/DecisionStack';
 import { BuildingStack } from './components/BuildingStack';
+import { LiveTaskActivity } from './components/LiveTaskActivity';
 import { TopCenterRail, type DrawerType } from './components/TopCenterRail';
 import { Drawer } from './components/Drawer';
 import { Canvas } from './components/Canvas';
@@ -278,6 +279,27 @@ function RoomShell({
   useEffect(() => {
     if (completedTaskCount > 0) setIframeNonce((n) => n + 1);
   }, [completedTaskCount]);
+
+  // Skeleton-complete milestone: when the agent calls mark_skeleton_complete
+  // (Phase 1 of a two-phase build), force an early iframe reload so the user
+  // sees the skeleton render right away. Phase 2 (research + polish) keeps
+  // going in the background. Track which task IDs we've already reacted to
+  // so we don't bump repeatedly as the same event sits in the running task's
+  // event stream.
+  const [skeletonNoticed] = useState(() => new Set<string>());
+  useEffect(() => {
+    for (const task of feed.tasks) {
+      if (task.status !== 'running' && task.status !== 'complete') continue;
+      if (skeletonNoticed.has(task.id)) continue;
+      const hasSkeleton = task.events.some(
+        (e) => e.kind === 'tool_call' && e.toolName === 'mark_skeleton_complete',
+      );
+      if (hasSkeleton) {
+        skeletonNoticed.add(task.id);
+        setIframeNonce((n) => n + 1);
+      }
+    }
+  }, [feed.tasks, skeletonNoticed]);
   const [rollbackNonce, setRollbackNonce] = useState(0);
   const iframeKey = `${sandboxUrl ?? 'none'}#${iframeNonce}#${rollbackNonce}`;
 
@@ -286,6 +308,13 @@ function RoomShell({
   const activeTaskCount = feed.tasks.filter(
     (t) => t.status === 'queued' || t.status === 'running',
   ).length;
+
+  // Most-recently-started running task — used by Canvas's empty state
+  // ticker and the mobile floating activity pill. Picks the latest queued
+  // or running task; if none, undefined.
+  const activeTask = feed.tasks
+    .filter((t) => t.status === 'queued' || t.status === 'running')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
   // Focus mode: hide all chrome, keep STT/tasks/agent running in background
   const focusMode = settings.focusMode;
@@ -319,6 +348,7 @@ function RoomShell({
         roomId={roomId}
         templateId={room.templateId}
         hasFirstVersion={feed.versions.length > 0 || completedTaskCount > 0}
+        activeTask={activeTask}
       />
 
       {focusMode ? (
@@ -349,6 +379,16 @@ function RoomShell({
           />
 
           <BuildingStack tasks={feed.tasks} isHost={isHost} />
+
+          {/* Mobile activity pill — desktop has BuildingStack instead.
+              Shows only when there's a running task AND we're past the
+              empty-state phase (since the overlay already shows the same
+              ticker in its center). */}
+          {activeTask && (feed.versions.length > 0 || completedTaskCount > 0) && (
+            <div className="md:hidden absolute left-3 right-3 top-20 z-30">
+              <LiveTaskActivity task={activeTask} />
+            </div>
+          )}
 
           <ParticipantDock
             onEndCall={onExitRoom}
