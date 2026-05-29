@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
-import { rooms, participants } from '@/lib/db/schema';
+import { rooms, participants, users } from '@/lib/db/schema';
 import { getTemplate } from '@/lib/templates';
 import { provisionRoomSandbox } from '@/lib/sandbox/room-sandbox';
+import { withDefaults } from '@/lib/user-preferences';
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -37,6 +38,16 @@ export async function POST(req: Request) {
 
   const trimmedInstructions = instructions?.trim() || null;
 
+  // Read the host's defaults — captureState is seeded from their preference
+  // so users who prefer "off the record" don't need to flip Vibe off on
+  // every new room.
+  const [hostRow] = await db
+    .select({ preferences: users.preferences })
+    .from(users)
+    .where(eq(users.id, session.user.id))
+    .limit(1);
+  const hostPrefs = withDefaults(hostRow?.preferences);
+
   // 1. Insert room as provisioning
   const [room] = await db
     .insert(rooms)
@@ -46,6 +57,7 @@ export async function POST(req: Request) {
       instructions: trimmedInstructions,
       hostUserId: session.user.id,
       status: 'provisioning',
+      captureState: hostPrefs.defaultCaptureState,
     })
     .returning();
 

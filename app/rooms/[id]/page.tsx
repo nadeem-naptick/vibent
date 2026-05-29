@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { and, eq } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
-import { rooms, participants } from '@/lib/db/schema';
+import { rooms, participants, users } from '@/lib/db/schema';
 import { mintLiveKitToken, publicLiveKitUrl } from '@/lib/livekit';
 import {
   ensureIndexes,
@@ -14,6 +14,7 @@ import { tasks } from '@/lib/db/schema';
 import { desc } from 'drizzle-orm';
 import { listVersions } from '@/lib/snapshots/manager';
 import { LiveRoomClient } from './LiveRoomClient';
+import { withDefaults } from '@/lib/user-preferences';
 import type { RoomFeed } from './types';
 
 export default async function RoomPage({
@@ -73,6 +74,16 @@ export default async function RoomPage({
   // Load existing transcripts + intents + tasks so the AI panel renders on
   // first paint for late joiners.
   await ensureIndexes();
+
+  // Load the viewer's preferences so the idle-pause threshold is per-user
+  // (room.captureState is already room-scoped; this controls how long their
+  // browser waits before auto-pausing).
+  const [viewerRow] = await db
+    .select({ preferences: users.preferences })
+    .from(users)
+    .where(eq(users.id, session.user.id))
+    .limit(1);
+  const viewerPrefs = withDefaults(viewerRow?.preferences);
   const [transcriptDocs, intentDocs, taskRows, versionRows] = await Promise.all([
     getTranscriptsCollection().then((c) =>
       c.find({ roomId: liveRoom.id }).sort({ createdAt: 1 }).limit(200).toArray(),
@@ -105,6 +116,8 @@ export default async function RoomPage({
       isHost={participant.role === 'host'}
       speakerName={participant.displayName}
       initialFeed={initialFeed}
+      initialCaptureState={liveRoom.captureState}
+      idleAutoPauseMinutes={viewerPrefs.idleAutoPauseMinutes}
       room={{
         title: liveRoom.title,
         objective: liveRoom.objective,

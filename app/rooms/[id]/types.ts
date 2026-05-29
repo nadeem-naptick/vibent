@@ -58,6 +58,10 @@ export type FeedMessage =
   | {
       kind: 'task_failed';
       payload: { taskId: string; intentId: string | null; error: string };
+    }
+  | {
+      kind: 'capture_state';
+      payload: { state: 'listening' | 'paused' };
     };
 
 export const FEED_TOPIC = 'agentic.feed';
