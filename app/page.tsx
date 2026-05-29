@@ -168,7 +168,7 @@ export default async function HomePage() {
             <div className="absolute -inset-x-10 -bottom-10 h-32 bg-gradient-to-t from-purple-300/40 to-transparent blur-3xl rounded-full pointer-events-none" />
             <div className="relative rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
               <img
-                src="/vibentimg.png"
+                src="/vibemtgimg.png"
                 alt="vibemtg — a video room where a real product takes shape live"
                 className="w-full h-auto block"
               />
