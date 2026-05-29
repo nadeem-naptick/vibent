@@ -8,15 +8,14 @@ import {
   MicOff,
   Video,
   VideoOff,
-  MonitorUp,
-  Users,
+  PenLine,
+  Brain,
   Radio,
   Monitor,
   Smartphone,
 } from 'lucide-react';
 import type { DeviceFrame } from '../useSettings';
 import {
-  useLocalParticipant,
   useParticipants,
   useTrackToggle,
   useTracks,
@@ -25,6 +24,7 @@ import {
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
 import { PillButton } from './PillButton';
+import { InviteTile } from './InviteTile';
 
 const GRADIENTS = [
   'bg-gradient-to-br from-blue-950 via-blue-700 to-slate-950',
@@ -40,9 +40,23 @@ type Props = {
   onEndCall: () => void;
   deviceFrame: DeviceFrame;
   onChangeDeviceFrame: (next: DeviceFrame) => void;
+  // Opens the manual decision draft modal. Omitted for non-hosts so the
+  // pill simply doesn't render.
+  onDraftDecision?: () => void;
+  // Brain (thinking mode) — host-only toggle that controls whether the
+  // executor uses extended reasoning. Omitted for non-hosts.
+  thinkingMode?: boolean;
+  onToggleThinking?: () => void;
 };
 
-export function ParticipantDock({ onEndCall, deviceFrame, onChangeDeviceFrame }: Props) {
+export function ParticipantDock({
+  onEndCall,
+  deviceFrame,
+  onChangeDeviceFrame,
+  onDraftDecision,
+  thinkingMode,
+  onToggleThinking,
+}: Props) {
   const participants = useParticipants();
 
   return (
@@ -53,24 +67,25 @@ export function ParticipantDock({ onEndCall, deviceFrame, onChangeDeviceFrame }:
         transform: 'translateX(-50%)',
       }}
     >
-      {/* Video tiles — horizontally scroll on mobile so more than one fits.
-          Max width is the viewport minus a small padding (mobile) or 200px
-          to leave room for the side overlays (desktop). */}
-      {participants.length > 0 && (
-        <div className="pointer-events-auto flex items-end gap-2 md:gap-3 rounded-[28px] border border-white/15 bg-slate-950/70 p-2 md:p-2.5 shadow-2xl backdrop-blur-2xl overflow-x-auto max-w-[calc(100vw-1.5rem)] md:max-w-[calc(100vw-200px)]">
-          {participants.map((p, index) => (
-            <ParticipantTile key={p.identity} participant={p} index={index} />
-          ))}
-        </div>
-      )}
+      {/* Video tiles + invite slot — both float directly on the canvas.
+          No grey pill container; each tile carries its own border + shadow.
+          The Invite tile sits at the end of the row, same row height. */}
+      <div className="pointer-events-auto flex items-end gap-2 md:gap-3 overflow-x-auto max-w-[calc(100vw-1.5rem)] md:max-w-[calc(100vw-200px)]">
+        {participants.map((p, index) => (
+          <ParticipantTile key={p.identity} participant={p} index={index} />
+        ))}
+        <InviteTile />
+      </div>
 
-      {/* Toolbar — people count, mic, cam, share, end call */}
+      {/* Toolbar — mic, cam, device preview, end call */}
       <div className="pointer-events-auto">
         <ParticipantToolbar
           onEndCall={onEndCall}
-          participantCount={participants.length}
           deviceFrame={deviceFrame}
           onChangeDeviceFrame={onChangeDeviceFrame}
+          onDraftDecision={onDraftDecision}
+          thinkingMode={thinkingMode}
+          onToggleThinking={onToggleThinking}
         />
       </div>
     </div>
@@ -79,16 +94,19 @@ export function ParticipantDock({ onEndCall, deviceFrame, onChangeDeviceFrame }:
 
 function ParticipantToolbar({
   onEndCall,
-  participantCount,
   deviceFrame,
   onChangeDeviceFrame,
+  onDraftDecision,
+  thinkingMode,
+  onToggleThinking,
 }: {
   onEndCall: () => void;
-  participantCount: number;
   deviceFrame: DeviceFrame;
   onChangeDeviceFrame: (next: DeviceFrame) => void;
+  onDraftDecision?: () => void;
+  thinkingMode?: boolean;
+  onToggleThinking?: () => void;
 }) {
-  const { localParticipant } = useLocalParticipant();
   // useTrackToggle subscribes to the underlying ParticipantEvent.Track* events
   // so the `enabled` flag stays in sync with the actual track state — unlike
   // a snapshot pulled into useState, which goes stale when LiveKit publishes
@@ -100,61 +118,93 @@ function ParticipantToolbar({
     source: Track.Source.Camera,
   });
 
-  async function toggleScreenShare() {
-    if (!localParticipant) return;
-    try {
-      await localParticipant.setScreenShareEnabled(!localParticipant.isScreenShareEnabled);
-    } catch (err) {
-      console.error('[toolbar] share toggle failed:', err);
-    }
-  }
-
   return (
     <>
-      {/* Mobile: just mic + cam + end. Compact pills. Screen share, device
-          frame, and participant count are desktop-only — they overflow a
-          phone-width viewport. */}
+      {/* Mobile: mic + cam + (draft if host) + end. Compact pills.
+          Device frame toggle is desktop-only — overflows a phone-width
+          viewport. Vibe pill lives in the top-left anchor. */}
       <div className="flex md:hidden items-center gap-2">
         <PillButton
           icon={mic ? Mic : MicOff}
           title={mic ? 'Mute mic' : 'Unmute mic'}
+          helpBody="Mutes your microphone for other humans in the room. Separate from Vibe — even with your mic on, Vibe controls whether the AI listens."
           onClick={() => toggleMic()}
           variant={mic ? 'default' : 'danger'}
         />
         <PillButton
           icon={camera ? Video : VideoOff}
           title={camera ? 'Stop camera' : 'Start camera'}
+          helpBody="Turns your camera feed on or off. Other participants only see your video when this is on."
           onClick={() => toggleCamera()}
           variant={camera ? 'default' : 'danger'}
         />
+        {onDraftDecision && (
+          <PillButton
+            icon={PenLine}
+            title="Draft a decision manually"
+            helpBody="Skip the auto-compose pool and write a decision yourself. Useful when the room agrees on what to build but you want exact wording before the executor runs."
+            onClick={onDraftDecision}
+          />
+        )}
+        {onToggleThinking && (
+          <PillButton
+            icon={Brain}
+            title={
+              thinkingMode
+                ? 'Thinking mode ON · deeper reasoning, slower'
+                : 'Thinking mode OFF · fast, no reasoning'
+            }
+            helpBody="When ON, the executor uses extended reasoning — slower but better for complex tasks. When OFF, the executor runs fast without thinking tokens. Per-task value is captured at submit time."
+            onClick={onToggleThinking}
+            variant={thinkingMode ? 'active' : 'default'}
+          />
+        )}
         <PillButton
           icon={PhoneOff}
           title="Leave room"
+          helpBody="Closes your connection to this room. The room and its sandbox keep running for everyone else — you can rejoin from the dashboard."
           onClick={onEndCall}
           variant="danger"
         />
       </div>
 
-      {/* Desktop: full toolbar. */}
+      {/* Desktop: full toolbar. Vibe pill lives in the top-left anchor. */}
       <div className="hidden md:flex items-center gap-5">
-        <PillButton
-          icon={Users}
-          title={`${participantCount} ${participantCount === 1 ? 'person' : 'people'}`}
-          variant="active"
-        />
         <PillButton
           icon={mic ? Mic : MicOff}
           title={mic ? 'Mute mic' : 'Unmute mic'}
+          helpBody="Mutes your microphone for other humans in the room. Separate from Vibe — even with your mic on, Vibe controls whether the AI listens."
           onClick={() => toggleMic()}
           variant={mic ? 'default' : 'danger'}
         />
         <PillButton
           icon={camera ? Video : VideoOff}
           title={camera ? 'Stop camera' : 'Start camera'}
+          helpBody="Turns your camera feed on or off. Other participants only see your video when this is on."
           onClick={() => toggleCamera()}
           variant={camera ? 'default' : 'danger'}
         />
-        <PillButton icon={MonitorUp} title="Share screen" onClick={toggleScreenShare} />
+        {onDraftDecision && (
+          <PillButton
+            icon={PenLine}
+            title="Draft a decision manually"
+            helpBody="Skip the auto-compose pool and write a decision yourself. Useful when the room agrees on what to build but you want exact wording before the executor runs."
+            onClick={onDraftDecision}
+          />
+        )}
+        {onToggleThinking && (
+          <PillButton
+            icon={Brain}
+            title={
+              thinkingMode
+                ? 'Thinking mode ON · deeper reasoning, slower'
+                : 'Thinking mode OFF · fast, no reasoning'
+            }
+            helpBody="When ON, the executor uses extended reasoning — slower but better for complex tasks. When OFF, the executor runs fast without thinking tokens. Per-task value is captured at submit time."
+            onClick={onToggleThinking}
+            variant={thinkingMode ? 'active' : 'default'}
+          />
+        )}
         <PillButton
           icon={deviceFrame === 'mobile' ? Smartphone : Monitor}
           title={
@@ -162,6 +212,7 @@ function ParticipantToolbar({
               ? 'Mobile preview — click to switch to desktop'
               : 'Desktop preview — click to switch to mobile'
           }
+          helpBody="Switches the artifact preview between desktop (full canvas) and mobile (390px) frame. Helpful when you need to check how the design works on phones."
           onClick={() => onChangeDeviceFrame(deviceFrame === 'mobile' ? 'desktop' : 'mobile')}
         />
         <PillButton icon={PhoneOff} title="Leave room" onClick={onEndCall} variant="danger" />

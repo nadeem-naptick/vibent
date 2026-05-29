@@ -2,9 +2,8 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Wand2, X, PenLine, ChevronsUpDown, Check, Trash2, Brain } from 'lucide-react';
+import { Wand2, X, Inbox, Check, Trash2 } from 'lucide-react';
 import type { DetectedIntent } from '@/lib/db/mongo';
-import { DraftDecisionModal } from './DraftDecisionModal';
 import { PillButton } from './PillButton';
 
 type PendingItem = {
@@ -23,8 +22,6 @@ type Props = {
   onRemoveFromPool: (intentId: string) => void;
   onApplyNow: () => void;
   isHost: boolean;
-  thinkingMode: boolean;
-  onToggleThinking: () => void;
 };
 
 export function DecisionStack({
@@ -37,11 +34,8 @@ export function DecisionStack({
   onRemoveFromPool,
   onApplyNow,
   isHost,
-  thinkingMode,
-  onToggleThinking,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const [drafting, setDrafting] = useState(false);
 
   const items = [
     ...pending.map((p) => ({
@@ -67,65 +61,39 @@ export function DecisionStack({
   }
 
   return (
-    <div className="absolute left-3 right-3 md:right-auto md:left-5 top-24 z-30 md:w-[340px] pointer-events-none">
-      {/* Header — same pill size as the bottom toolbar */}
-      <div className="pointer-events-auto mb-3 flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-5">
-        {isHost && (
+    <div className="absolute left-3 right-3 md:right-auto md:left-[100px] top-24 md:top-4 z-30 md:w-[340px] pointer-events-none">
+      {/* Header — only renders when there are detections.
+          Collapsed: just the chevron pill with count badge.
+          Expanded:  chevron + Apply + Delete-all (red icon pill). */}
+      {total > 0 && (
+        <div className="pointer-events-auto mb-3 flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-5">
           <PillButton
-            icon={PenLine}
-            title="Draft a decision manually"
-            onClick={() => setDrafting(true)}
+            icon={Inbox}
+            title={expanded ? 'Collapse detections' : `${total} detection${total === 1 ? '' : 's'} ready`}
+            helpBody="Detected intents waiting to compose into a decision. The room watches your conversation for things like 'add a button' or 'change the color'. Once enough related intents pool together, they auto-compose into a decision you can apply."
+            onClick={() => setExpanded((v) => !v)}
+            variant={expanded ? 'active' : 'default'}
+            badge={total || null}
           />
-        )}
-        <PillButton
-          icon={ChevronsUpDown}
-          title={expanded ? 'Collapse' : 'Expand'}
-          onClick={() => setExpanded((v) => !v)}
-          variant={expanded ? 'active' : 'default'}
-          badge={total || null}
-        />
-        {isHost && (
-          <PillButton
-            icon={Check}
-            title={`Apply ${total} now`}
-            onClick={onApplyNow}
-            variant={items.length === 0 || composing ? 'default' : 'active'}
-          />
-        )}
-        {isHost && (
-          <PillButton
-            icon={Brain}
-            title={
-              thinkingMode
-                ? 'Thinking mode ON · deeper reasoning, slower'
-                : 'Thinking mode OFF · fast, no reasoning'
-            }
-            onClick={onToggleThinking}
-            variant={thinkingMode ? 'active' : 'default'}
-          />
-        )}
-      </div>
-
-      {/* Delete-all bar — only visible when expanded with items */}
-      {expanded && items.length > 0 && isHost && (
-        <div className="pointer-events-auto mb-3">
-          <button
-            onClick={deleteAll}
-            className="flex w-full items-center justify-center gap-2 rounded-full border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/15 transition-colors"
-          >
-            <Trash2 size={13} />
-            Delete all {total}
-          </button>
+          {expanded && isHost && (
+            <>
+              <PillButton
+                icon={Check}
+                title={`Apply ${total} now`}
+                helpBody="Skip the threshold and compose a decision from whatever is currently in the pool right now. Useful when the room has clearly agreed and you don't want to wait for the auto-compose."
+                onClick={onApplyNow}
+                variant={composing ? 'default' : 'active'}
+              />
+              <PillButton
+                icon={Trash2}
+                title={`Delete all ${total}`}
+                helpBody="Discard every detection in the pool. Stops anything from forming a decision. Useful when the conversation went off-topic and the pool is full of noise."
+                onClick={deleteAll}
+                variant="danger"
+              />
+            </>
+          )}
         </div>
-      )}
-
-      {drafting && (
-        <DraftDecisionModal
-          roomId={roomId}
-          thinkingMode={thinkingMode}
-          onClose={() => setDrafting(false)}
-          onSubmitted={() => setDrafting(false)}
-        />
       )}
 
       {/* Stack */}

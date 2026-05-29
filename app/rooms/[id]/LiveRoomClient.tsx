@@ -17,14 +17,20 @@ import { useSettings } from './useSettings';
 import type { RoomFeed } from './types';
 import { ParticipantDock } from './components/ParticipantDock';
 import { DecisionStack } from './components/DecisionStack';
+import { DraftDecisionModal } from './components/DraftDecisionModal';
 import { BuildingStack } from './components/BuildingStack';
 import { LiveTaskActivity } from './components/LiveTaskActivity';
 import { TopCenterRail, type DrawerType } from './components/TopCenterRail';
 import { Drawer } from './components/Drawer';
 import { Canvas } from './components/Canvas';
 import { BottomActionCluster } from './components/BottomActionCluster';
+import { CaptureToggle } from './components/CaptureToggle';
 import { ExitFocusPill } from './components/ExitFocusPill';
+import { PillButton } from './components/PillButton';
 import { RoomLoadingScreen } from './components/RoomLoadingScreen';
+import { Focus } from 'lucide-react';
+import { useCaptureState } from './useCaptureState';
+import { useIdleAutoPause } from './useIdleAutoPause';
 import type { Room } from '@/lib/db/schema';
 
 type Props = {
@@ -36,6 +42,9 @@ type Props = {
   isHost: boolean;
   speakerName: string;
   initialFeed: RoomFeed;
+  initialCaptureState: 'listening' | 'paused';
+  // Minutes of silence before Vibe auto-pauses. 0 = never.
+  idleAutoPauseMinutes: number;
   room: Pick<Room, 'title' | 'objective' | 'outputType' | 'context' | 'templateId' | 'instructions'>;
 };
 
@@ -50,6 +59,8 @@ export function LiveRoomClient({
   isHost,
   speakerName,
   initialFeed,
+  initialCaptureState,
+  idleAutoPauseMinutes,
   room,
 }: Props) {
   const router = useRouter();
@@ -212,6 +223,8 @@ export function LiveRoomClient({
           sandboxUrl={sandboxUrl}
           status={status}
           initialFeed={initialFeed}
+          initialCaptureState={initialCaptureState}
+          idleAutoPauseMinutes={idleAutoPauseMinutes}
           room={room}
           onExitRoom={() => router.push('/dashboard')}
         />
@@ -228,6 +241,8 @@ function RoomShell({
   sandboxUrl,
   status,
   initialFeed,
+  initialCaptureState,
+  idleAutoPauseMinutes,
   room,
   onExitRoom,
 }: {
@@ -237,11 +252,21 @@ function RoomShell({
   sandboxUrl: string | null;
   status: string;
   initialFeed: RoomFeed;
+  initialCaptureState: 'listening' | 'paused';
+  idleAutoPauseMinutes: number;
   room: Props['room'];
   onExitRoom: () => void;
 }) {
   const connectionState = useConnectionState();
-  const sttEnabled = connectionState === ConnectionState.Connected;
+  const { state: captureState, toggle: toggleCapture } = useCaptureState(
+    roomId,
+    initialCaptureState,
+  );
+  // STT runs only when LiveKit is connected AND the host hasn't paused
+  // capture. Flipping captureState → 'paused' tears down the Deepgram WS
+  // via useBrowserSTT's enabled flag.
+  const sttEnabled =
+    connectionState === ConnectionState.Connected && captureState === 'listening';
 
   const { feed, updateIntent, addLocalTranscript, addLocalIntent, completedTaskCount } =
     useRoomFeed(initialFeed, roomId);
@@ -250,6 +275,16 @@ function RoomShell({
 
   // Fire toast notifications on task / version state changes
   useRoomToasts({ tasks: feed.tasks, versions: feed.versions });
+
+  // Auto-pause capture after N min with no transcripts — host-side only.
+  // N comes from the viewer's preferences; 0 means disabled.
+  useIdleAutoPause({
+    isHost,
+    captureState,
+    transcripts: feed.transcripts,
+    idleMinutes: idleAutoPauseMinutes,
+    onAutoPause: () => toggleCapture('paused'),
+  });
 
   useBrowserSTT({
     roomId,
@@ -321,6 +356,11 @@ function RoomShell({
   const enterFocus = useCallback(() => updateSettings({ focusMode: true }), [updateSettings]);
   const exitFocus = useCallback(() => updateSettings({ focusMode: false }), [updateSettings]);
 
+  // Manual decision draft — modal lives at the top level of the room so it
+  // can be triggered from either the bottom toolbar (PenLine pill) or any
+  // future entry points without prop-drilling state through DecisionStack.
+  const [drafting, setDrafting] = useState(false);
+
   // Keyboard shortcut: F toggles focus mode (unless user is typing in an input)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -355,6 +395,26 @@ function RoomShell({
         <ExitFocusPill onClick={exitFocus} />
       ) : (
         <>
+          {/* Top-left — Vibe is anchored here. The DecisionStack fans out
+              to its right when there are detections. */}
+          <div className="absolute left-4 top-4 z-30 pointer-events-auto">
+            <CaptureToggle
+              state={captureState}
+              isHost={isHost}
+              onToggle={toggleCapture}
+            />
+          </div>
+
+          {/* Top-right — Focus pill (Fullscreen moved to bottom-right). */}
+          <div className="absolute right-4 top-4 z-30 pointer-events-auto">
+            <PillButton
+              icon={Focus}
+              title="Focus mode"
+              helpBody="Hides every overlay — only the artifact canvas remains. AI keeps capturing and tasks keep running in the background. Press F (or hover the corner) to exit."
+              onClick={enterFocus}
+            />
+          </div>
+
           <TopCenterRail
             badges={{
               transcript: feed.transcripts.length,
@@ -374,8 +434,6 @@ function RoomShell({
             onRemoveFromPool={autoCompose.removeFromPool}
             onApplyNow={autoCompose.composeNow}
             isHost={isHost}
-            thinkingMode={settings.thinkingMode}
-            onToggleThinking={() => updateSettings({ thinkingMode: !settings.thinkingMode })}
           />
 
           <BuildingStack tasks={feed.tasks} isHost={isHost} />
@@ -394,14 +452,29 @@ function RoomShell({
             onEndCall={onExitRoom}
             deviceFrame={settings.deviceFrame}
             onChangeDeviceFrame={(f) => updateSettings({ deviceFrame: f })}
+            onDraftDecision={isHost ? () => setDrafting(true) : undefined}
+            thinkingMode={isHost ? settings.thinkingMode : undefined}
+            onToggleThinking={
+              isHost
+                ? () => updateSettings({ thinkingMode: !settings.thinkingMode })
+                : undefined
+            }
           />
+
+          {drafting && (
+            <DraftDecisionModal
+              roomId={roomId}
+              thinkingMode={settings.thinkingMode}
+              onClose={() => setDrafting(false)}
+              onSubmitted={() => setDrafting(false)}
+            />
+          )}
 
           <BottomActionCluster
             roomId={roomId}
             settings={settings}
             updateSettings={updateSettings}
             thresholdLimits={thresholdLimits}
-            onEnterFocus={enterFocus}
           />
 
           <Drawer

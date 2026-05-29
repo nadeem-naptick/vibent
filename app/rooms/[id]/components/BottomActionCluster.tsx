@@ -5,7 +5,6 @@ import {
   Settings2,
   Maximize2,
   Download,
-  Focus,
   Share2,
   Copy,
   CheckCircle2,
@@ -22,7 +21,6 @@ type Props = {
   settings: RoomSettings;
   updateSettings: (patch: Partial<RoomSettings>) => void;
   thresholdLimits: { MIN_THRESHOLD: number; MAX_THRESHOLD: number };
-  onEnterFocus: () => void;
 };
 
 export function BottomActionCluster({
@@ -30,7 +28,6 @@ export function BottomActionCluster({
   settings,
   updateSettings,
   thresholdLimits,
-  onEnterFocus,
 }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -137,6 +134,7 @@ export function BottomActionCluster({
         <PillButton
           icon={MoreHorizontal}
           title="Room actions"
+          helpBody="Share, export, and other room-level actions. Collapsed to a single button on mobile to save space."
           onClick={() => setMobileMenuOpen(true)}
         />
         {mobileMenuOpen && (
@@ -145,14 +143,6 @@ export function BottomActionCluster({
             settings={settings}
             updateSettings={updateSettings}
             limits={limits}
-            onEnterFocus={() => {
-              setMobileMenuOpen(false);
-              onEnterFocus();
-            }}
-            onFullscreen={() => {
-              setMobileMenuOpen(false);
-              toggleFullscreen();
-            }}
             onShare={() => {
               setMobileMenuOpen(false);
               openShare();
@@ -173,6 +163,7 @@ export function BottomActionCluster({
         <PillButton
           icon={Settings2}
           title="Room settings"
+          helpBody="Per-room tuning. Right now: how many detections it takes before the composer fires a decision. Your account-wide defaults live at /settings."
           onClick={() => setSettingsOpen((v) => !v)}
         />
         {settingsOpen && (
@@ -202,26 +193,24 @@ export function BottomActionCluster({
       </div>
 
       <PillButton
-        icon={Focus}
-        title="Focus mode — hide all chrome (F)"
-        onClick={onEnterFocus}
+        icon={Maximize2}
+        title="Fullscreen"
+        helpBody="Goes browser-fullscreen on the artifact canvas. Press Esc to exit. Different from Focus mode — fullscreen hides browser chrome too."
+        onClick={toggleFullscreen}
       />
-
-      <PillButton icon={Maximize2} title="Fullscreen" onClick={toggleFullscreen} />
 
       <PillButton
         icon={Share2}
-        label="Share"
-        title="Build + share a public URL of the current artifact"
+        title="Share"
+        helpBody="Builds the current artifact and uploads it to S3 with a public URL anyone can open without signing in. Link looks like vibemtg.com/shares/abc123/. Slugs are unguessable."
         onClick={openShare}
       />
 
       <PillButton
         icon={exporting ? Loader2 : Download}
-        label={exporting ? 'Building…' : 'Export'}
-        title="Build the project and download a ZIP of the static site"
+        title={exporting ? 'Building export…' : 'Export'}
+        helpBody="Builds the artifact and downloads it. Returns a single self-contained HTML file if possible, or a ZIP if the project has binary assets. Opens directly from your filesystem — no server needed."
         onClick={downloadExport}
-        variant="primary"
       />
 
       {exportError && (
@@ -251,8 +240,6 @@ function MobileActionsSheet({
   settings,
   updateSettings,
   limits,
-  onEnterFocus,
-  onFullscreen,
   onShare,
   onExport,
   exporting,
@@ -261,8 +248,6 @@ function MobileActionsSheet({
   settings: RoomSettings;
   updateSettings: (patch: Partial<RoomSettings>) => void;
   limits: { MIN_THRESHOLD: number; MAX_THRESHOLD: number };
-  onEnterFocus: () => void;
-  onFullscreen: () => void;
   onShare: () => void;
   onExport: () => void;
   exporting: boolean;
@@ -292,8 +277,6 @@ function MobileActionsSheet({
             iconClassName={exporting ? 'animate-spin' : ''}
             primary
           />
-          <MobileAction icon={Focus} label="Focus mode" onClick={onEnterFocus} />
-          <MobileAction icon={Maximize2} label="Fullscreen" onClick={onFullscreen} />
         </div>
 
         <div className="mt-6 pt-5 border-t border-white/8">
