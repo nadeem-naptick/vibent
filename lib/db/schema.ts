@@ -10,6 +10,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { nanoid } from 'nanoid';
 import type { AdapterAccountType } from 'next-auth/adapters';
+import type { UserPreferences } from '@/lib/user-preferences';
 
 // ---------------------------------------------------------------------------
 // Auth.js v5 tables (shape required by @auth/drizzle-adapter)
@@ -27,6 +28,12 @@ export const users = pgTable('users', {
   // existing accounts created via the dev name-only flow; new accounts
   // through email/password signup always have one.
   passwordHash: text('password_hash'),
+  // Per-user app preferences (default room behavior, idle thresholds, etc.).
+  // Shape is enforced by Zod at the boundary — see lib/user-preferences.ts.
+  // Stored as jsonb so new keys can be added without migrations. The type
+  // is Partial<> so a literal {} default is legal; reads pass through
+  // withDefaults() to fill in missing keys.
+  preferences: jsonb('preferences').$type<Partial<UserPreferences>>().default({}),
 });
 
 export const accounts = pgTable(
@@ -126,6 +133,15 @@ export const taskStatusEnum = pgEnum('task_status', [
   'cancelled',
 ]);
 
+// Host-controlled toggle: 'listening' streams mic→Deepgram + drives the
+// intent/decision/task pipeline; 'paused' closes the Deepgram WS so no new
+// transcripts enter. Anything already queued (decisions awaiting approval,
+// running tasks) keeps flowing — only new mic capture stops.
+export const roomCaptureStateEnum = pgEnum('room_capture_state', [
+  'listening',
+  'paused',
+]);
+
 export const rooms = pgTable('rooms', {
   id: text('id')
     .primaryKey()
@@ -149,6 +165,8 @@ export const rooms = pgTable('rooms', {
   // Free-form context the host supplies at room creation (audience, tone,
   // brand colors, reference links, problem statement, etc.)
   context: jsonb('context').$type<RoomContext>().default({}),
+  // Host-controlled mic capture state — see roomCaptureStateEnum.
+  captureState: roomCaptureStateEnum('capture_state').notNull().default('listening'),
   createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
   archivedAt: timestamp('archived_at', { mode: 'date' }),
