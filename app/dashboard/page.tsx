@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { desc, eq } from 'drizzle-orm';
-import { Plus, Sparkles, Layers3 } from 'lucide-react';
+import { Plus, Sparkles, Layers3, Settings as SettingsIcon } from 'lucide-react';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { rooms } from '@/lib/db/schema';
@@ -38,12 +38,23 @@ export default async function DashboardPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/85 px-3 py-1.5">
+            <Link
+              href="/settings"
+              className="hidden sm:flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/85 px-3 py-1.5 hover:border-white/25 transition-colors"
+              title="Settings"
+            >
               <div className="grid h-6 w-6 place-items-center rounded-full bg-blue-500/25 text-blue-100 text-xs font-semibold">
                 {initial}
               </div>
               <span className="text-sm text-white/80">{session.user.name}</span>
-            </div>
+            </Link>
+            <Link
+              href="/settings"
+              className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-slate-900/85 text-white/65 hover:text-white hover:border-white/25 transition-colors"
+              title="Settings"
+            >
+              <SettingsIcon size={15} />
+            </Link>
             <SignOutButton />
           </div>
         </div>
