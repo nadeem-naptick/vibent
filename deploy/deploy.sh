@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# One-command deploy to naptick-uat.
+# One-command deploy to vibemtg-prod.
 #
 #   bash deploy/deploy.sh           # safe deploy (refuses dirty tree)
 #   bash deploy/deploy.sh --dirty   # deploy WIP changes anyway
 #
 # What it does:
 #   1. cd to repo root, sanity-check we're on master with a clean tree
-#   2. npm run build locally  (t3.medium can't build in-place — OOM)
-#   3. rsync the runtime files to /home/ubuntu/vibent
-#   4. npm ci --omit=dev + pm2 restart vibent-agentic on the box
-#   5. probe the tunnel URL from .env and report it back
+#   2. npm run build locally  (smaller boxes can OOM on `next build`)
+#   3. rsync the runtime files to /home/ubuntu/vibemtg
+#   4. npm ci --omit=dev + pm2 restart vibemtg on the box
+#   5. probe NEXTAUTH_URL from .env and report it back
 
 set -euo pipefail
 
-REMOTE="naptick-uat"
-REMOTE_DIR="/home/ubuntu/vibent"
-APP_NAME="vibent-agentic"
+REMOTE="vibemtg-prod"
+REMOTE_DIR="/home/ubuntu/vibemtg"
+APP_NAME="vibemtg"
 
 ALLOW_DIRTY=0
 for arg in "$@"; do
